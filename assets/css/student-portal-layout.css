@@ -1,0 +1,19 @@
+/* Remove space left by disabled navbar (adjust height based on your navbar) */
+body.student-portal, .nds-calendar-container {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+}
+
+/* Move calendar header to the top */
+.fc-header-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    background: #fff; /* Ensure visibility over content */
+    border-bottom: 1px solid #ddd;
+}
+
+/* Adjust main content to account for sticky header if needed */
+.fc-view-container {
+    margin-top: 10px; /* Small gap if header is sticky */
+}
