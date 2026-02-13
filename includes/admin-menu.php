@@ -32,23 +32,23 @@ function nds_school_add_admin_menu() {
     );
 
     // ============================================================================
-    // ACADEMIC STRUCTURE (Hierarchical: Faculties → Programs → Courses)
+    // ACADEMIC STRUCTURE (Hierarchical: Programs → Faculties → Courses)
     // ============================================================================
     
-    // Faculties (Top Level - replaces "Education Paths")
+    // Programs (Top Level - replaces "Education Paths")
     add_submenu_page(
         'nds-academy',
-        'Faculties',
-        'Faculties',
+        'Programs',
+        'Programs',
         'manage_options',
         'nds-faculties',
         'nds_faculties_page'  // Will use existing function or create alias
     );
 
-    // Faculties Edit (hidden - accessed via URL)
+    // Programs Edit (hidden - accessed via URL)
     add_submenu_page(
         'nds-academy',
-        'Edit Faculty',
+        'Edit Program',
         '',
         'manage_options',
         'nds-edit-faculty',
@@ -58,7 +58,7 @@ function nds_school_add_admin_menu() {
     // Keep old slug for backward compatibility
     add_submenu_page(
         'nds-academy',
-        'Faculties',
+        'Programs',
         '',
         'manage_options',
         'nds-education-paths',
@@ -67,47 +67,47 @@ function nds_school_add_admin_menu() {
 
     add_submenu_page(
         'nds-academy',
-        'Edit Faculty',
+        'Edit Program',
         '',
         'manage_options',
         'nds-edit-education-paths-page',
         'nds_edit_education_paths_page'  // Keep for backward compatibility
     );
 
-    // Programs (can filter by faculty_id)
+    // Faculties (can filter by program_id)
     add_submenu_page(
         'nds-academy',
-        'Programs',
-        'Programs',
+        'Faculties',
+        'Faculties',
         'manage_options',
         'nds-programs',
         'nds_programs_page'
     );
 
-    // Program Edit (hidden)
+    // Faculty Edit (hidden)
     add_submenu_page(
         'nds-academy',
-        'Edit Program',
+        'Edit Faculty',
         '',
         'manage_options',
         'nds-edit-program',
         'nds_edit_program_page'
     );
 
-    // Courses (can filter by program_id)
+    // Qualifications (can filter by program_id)
     add_submenu_page(
         'nds-academy',
-        'Courses',
-        'Courses',
+        'Qualifications',
+        'Qualifications',
         'manage_options',
         'nds-courses',
         'nds_courses_page'
     );
 
-    // Course Edit & Overview (hidden - accessed via Courses page)
+    // Qualification Edit & Overview (hidden - accessed via Qualifications page)
     add_submenu_page(
         'nds-academy',
-        'Edit Course',
+        'Edit Qualification',
         '',
         'manage_options',
         'nds-edit-course',
@@ -116,17 +116,17 @@ function nds_school_add_admin_menu() {
 
     add_submenu_page(
         'nds-academy',
-        'Course Overview',
+        'Qualification Overview',
         '',
         'manage_options',
         'nds-course-overview',
         'nds_course_overview_page'
     );
 
-    // Keep old "Add Course" for backward compatibility (hidden)
+    // Keep old "Add Qualification" for backward compatibility (hidden)
     add_submenu_page(
         'nds-academy',
-        'Add Course',
+        'Add Qualification',
         '',
         'manage_options',
         'nds-add-course',

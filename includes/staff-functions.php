@@ -457,24 +457,47 @@ function nds_assign_lecturer_to_course() {
     global $wpdb;
     $course_id = isset($_POST['course_id']) ? intval($_POST['course_id']) : 0;
     $lecturer_id = isset($_POST['lecturer_id']) ? intval($_POST['lecturer_id']) : 0;
+    
+    // Get redirect_to and program_id from POST
+    $redirect_to = isset($_POST['redirect_to']) ? esc_url_raw($_POST['redirect_to']) : admin_url('admin.php?page=nds-staff-management');
+    $program_id = isset($_POST['program_id']) ? intval($_POST['program_id']) : 0;
+    
     if ($course_id <= 0 || $lecturer_id <= 0) {
-        wp_redirect(admin_url('admin.php?page=nds-staff-management&error=' . urlencode('invalid_params')));
+        $redirect_url = add_query_arg('error', urlencode('invalid_params'), $redirect_to);
+        if ($program_id > 0) {
+            $redirect_url = add_query_arg('program_id', $program_id, $redirect_url);
+        }
+        wp_redirect($redirect_url);
         exit;
     }
     $table = $wpdb->prefix . 'nds_course_lecturers';
     $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table} WHERE course_id=%d AND lecturer_id=%d", $course_id, $lecturer_id));
     if ($exists) {
-        wp_redirect(admin_url('admin.php?page=nds-staff-management&error=' . urlencode('already_assigned')));
+        $redirect_url = add_query_arg('error', urlencode('already_assigned'), $redirect_to);
+        if ($program_id > 0) {
+            $redirect_url = add_query_arg('program_id', $program_id, $redirect_url);
+        }
+        wp_redirect($redirect_url);
         exit;
     }
     $ok = $wpdb->insert($table, ['course_id' => $course_id, 'lecturer_id' => $lecturer_id], ['%d','%d']);
     if ($ok === false) {
-        wp_redirect(admin_url('admin.php?page=nds-staff-management&error=' . urlencode('assign_failed')));
+        $redirect_url = add_query_arg('error', urlencode('assign_failed'), $redirect_to);
+        if ($program_id > 0) {
+            $redirect_url = add_query_arg('program_id', $program_id, $redirect_url);
+        }
+        wp_redirect($redirect_url);
         exit;
     }
     // Audit
     nds_log_staff_action($lecturer_id, get_current_user_id(), 'assign_course', 'assign', null, wp_json_encode(['course_id' => $course_id]));
-    wp_redirect(admin_url('admin.php?page=nds-staff-management&success=' . urlencode('lecturer_assigned')));
+    
+    // Success redirect with program_id if provided
+    $redirect_url = add_query_arg('success', urlencode('lecturer_assigned'), $redirect_to);
+    if ($program_id > 0) {
+        $redirect_url = add_query_arg('program_id', $program_id, $redirect_url);
+    }
+    wp_redirect($redirect_url);
     exit;
 }
 

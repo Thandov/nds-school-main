@@ -1,0 +1,62 @@
+id,student_number,wp_user_id,faculty_id,first_name,last_name,email,phone,status
+1,OCHEF0032G,,5,"Princess Rethabile",Bakhetsi,rethabileprincess3@gmail.com,656159454,active
+2,OCHEF0033G,,5,Hlalanathi,Gala,galahlalanathi@gmail.com,799236877,active
+3,OCHEF0034G,,5,"Mbali Fortunate",Gaveni,mbaligaveni040@gmail.com,718607206,active
+4,OCHEF0035G,,5,Dieketseng,Hlajoane,dhlajoane03@gmail.com,661335476,active
+5,OCHEF0036G,,5,"Danica Hay-Leigh",Jansen,jansendanica7@gmail.com,767860253,active
+6,OCHEF0037G,,5,"Lebohang Ernest",Kaba,kabalebohang@gmail.com,676958403,active
+7,OCHEF0038G,,5,Ntombizodwa,Khasi,khasintombizodwa@gmail.com,678340751,active
+8,OCHEF0039G,,5,"Retshidisitswe Romeo",Mafa,romeomafa10@icloud.com,623207310,active
+9,OCHEF0040G,,5,Ntsoaki,Maqabe,maqabentsoaki9@gmail.com,716317656,active
+10,OCHEF0041G,,5,Aphelele,Matiwane,aphelelematiwane28@gmail.com,787827037,active
+11,OCHEF0042G,,5,"Zanele Nomasonto",Mbele,zanelembele94@gmail.com,797413115,active
+12,OCHEF0043G,,5,Itumeleng,Mejoana,mejoana.itu@student.nds.example,active,active
+13,OCHEF0044G,,5,"Sarah Dineo",Minnie,dineominnie9@gmail.com,685756008,active
+14,OCHEF0045G,,5,Olwethu,Mkhwanazi,omkhwanazi2111@gmail.com,694386773,active
+15,OCHEF0046G,,5,Samukele,Mnguni,samkelemnguni22@gmail.com,764580636,active
+16,OCHEF0047G,,5,Mapuleng,Mokhema,lebohangmokhema62@gmail.com,664162750,active
+17,OCHEF0048G,,5,"Relebohile Motshidisi",Morobe,lebo9020@gmail.com,717689675,active
+18,OCHEF0049G,,5,Lerato,Motloenya,leratomotloenya13@gmail.com,698612970,active
+19,OCHEF0050G,,5,"Neo Mankosasane",Mpembe,Khosieymakhosazanat@gmail.com,747979358,active
+20,OCHEF0051G,,5,"Mpho Totius",Mzizi,Mphomzizi408@gmail.com,687095751,active
+21,OCHEF0052G,,5,Somila,Ncaphayi,ncaphayi.som@student.nds.example,active,active
+22,OCHEF0053G,,5,"Stefan Chris",Nehring,sc.nehring@gmail.com,763030549,active
+23,OCHEF0054G,,5,"Andile Shaun",Netnou,netnou.and@student.nds.example,active,active
+24,OCHEF0055G,,5,"Rethabile Princess",Pule,princessbile111@gmail.com,684066481,active
+25,OCHEF0056G,,5,"Hope Jabulile",Radebe,radebehope300@gmail.com,763037889,active
+26,OCHEF0057G,,5,Boitumelo,Radebe,radebe.boi@student.nds.example,active,active
+27,OCHEF0058G,,5,Buhle,Sobekwa,buhlesobekwa@gmail.com,731541138,active
+28,OCHEF0059G,,5,Karabo,Thonka,thonkakarabo49@gmail.com,634345494,active
+29,OCHEF0060G,,5,"Mamello Patience",Tsekahali,tsekahalimp@gmail.com,735468341,active
+30,OCHEF0061G,,5,"Itumeleng Hessie",Tsekahali,tsekahaliituhe@gmail.com,791552961,active
+31,OCHEF0001F,,5,"Felicia Nnedimma",Alosiobi,alisiobifelicia2@gmail.com,738201924,active
+32,OCHEF0002F,,5,Mbali,Buthelezi,buthelezimbali@gmail.com,764748608,active
+33,OCHEF0003F,,5,"Eunice Fundokuhle",Dlamini,edhlamini98@gmail.com,810353895,active
+34,OCHEF0004F,,5,Siwamkele,Fukuthwa,siwamkele04@gmail.com,635337087,active
+35,OCHEF0005F,,5,Mamello,Kumalo,khumalomamello560@gmail.com,657455701,active
+36,OCHEF0006F,,5,Malefa,Lebusa,lebusa.mal@student.nds.example,active,active
+37,OCHEF0007F,,5,Keorapetse,Lehoko,keorapetselehoko378@gmail.com,719400928,active
+38,OCHEF0008F,,5,Rethabile,Lejone,lejone.ret@student.nds.example,active,active
+39,OCHEF0009F,,5,Rethabile,Madumise,retha751@gmail.com,663311224,active
+40,OCHEF0010F,,5,"Mmakirileng Dorah",Makhotla,makhotlammakirileng@gmailcom,670860967,active
+41,OCHEF0012F,,5,"Lerato Emily",Mathe,leratomate099@gmail.com,681232349,active
+42,OCHEF0013F,,5,Reabetsoe,Matsapola,matsapolareabetsoe@gmail.com,683175809,active
+43,OCHEF0014F,,5,Bongiwe,Matsha,bongiwematsha7@gmail.com,634268447,active
+44,OCHEF0015F,,5,Luvo,Mlindazwe,luvomlindazwe0@gmail.com,734438395,active
+45,OCHEF0016F,,5,"Katleho Godwill",Modupe,Katlehochandrey8@gmail.com,795644570,active
+46,OCHEF0017F,,5,Kagiso,Mofokeng,Kgk928588@gail.com,718018280,active
+47,OCHEF0018F,,5,"Nthabeleng Millicent",Mofokeng,mnthabeleng760@gmail.com,810655968,active
+48,OCHEF0019F,,5,Mpho,Mofokeng,mphomofokeng2014@gmail.com,814519254,active
+49,OCHEF0020F,,5,Puleng,Mofokeng,mofokeng462@gmail.com,717072917,active
+50,OCHEF0021F,,5,"Paballo Lavonne",Moisa,paballom1411@gmail.com,656042208,active
+51,OCHEF0022F,,5,Thato,Molaodi,prettymolaodi260@gmail.com,635213033,active
+52,OCHEF0023F,,5,"Betty Bessie",Nyawuza,nyawuza.bet@student.nds.example,active,active
+53,OCHEF0024F,,5,"Comfort Sthembiso",Phadi,phadi.com@student.nds.example,active,active
+54,OCHEF0025F,,5,Mpho,Rammai,mphorammai27@gmail.com,822309550,active
+55,OCHEF0026F,,5,"David Samente",Sibusiso,Sibusisosamente@moov.life,735061408,active
+56,OCHEF0027F,,5,Ndosi,Sibaya,Ndosiiannah69@gmail.com,606100802,active
+57,OCHEF0028F,,5,"Lerato Natasha",Tala,leratotala6@gmail.com,680240291,active
+58,OCHEF0029F,,5,Refiloe,Tau,tau.ref@student.nds.example,active,active
+59,OCHEF0030F,,5,"Lerato Angela",Thapedi,leratoangelathapedi@gmail.com,787867157,active
+60,OCHEF0031F,,5,"Kevin Kamohelo",Tsehle,kevintsehle18@gmail.com,677647132,active
+181,dasfadf,,,dsfg,sdgf,,,prospect

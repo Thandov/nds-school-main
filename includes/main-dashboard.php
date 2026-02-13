@@ -67,6 +67,18 @@ function nds_academy_main_dashboard() {
     $total_applications = $stats['total_applications'];
     $pending_applications = $stats['pending_applications'];
 
+    // --- NEW: Fetch lists for modals ---
+    $all_students_list = $wpdb->get_results("SELECT id, first_name, last_name, student_number, status FROM {$wpdb->prefix}nds_students ORDER BY created_at DESC", ARRAY_A);
+    $all_staff_list = $wpdb->get_results("SELECT id, first_name, last_name, role FROM {$wpdb->prefix}nds_staff ORDER BY created_at DESC", ARRAY_A);
+    $all_programs_list = $wpdb->get_results("SELECT id, name, description FROM {$wpdb->prefix}nds_programs ORDER BY created_at DESC", ARRAY_A);
+    $all_apps_list = $wpdb->get_results("
+        SELECT a.id, a.application_no, af.full_name, a.status, a.created_at as submitted_at
+        FROM {$wpdb->prefix}nds_applications a
+        LEFT JOIN {$wpdb->prefix}nds_application_forms af ON a.id = af.application_id
+        GROUP BY a.id
+        ORDER BY a.created_at DESC
+    ", ARRAY_A);
+
     // ---------------------------------------------------------------------
     // Recent activity
     // ---------------------------------------------------------------------
@@ -87,7 +99,12 @@ function nds_academy_main_dashboard() {
     $staff_student_ratio = $total_students > 0 ? round($total_students / max(1, $total_staff), 1) : 0; // students per staff
     $pending_applications_pct = $total_applications > 0 ? round(($pending_applications / max(1, $total_applications)) * 100) : 0;
     ?>
-    <div class="nds-tailwind-wrapper bg-gray-50 min-h-screen" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <style>
+        /* Ensure the WordPress footer doesn't overlap our custom dashboard */
+        body[class*="nds-academy"] #wpfooter { display: none !important; }
+        .nds-tailwind-wrapper { position: relative; z-index: 1; }
+    </style>
+    <div class="nds-tailwind-wrapper bg-gray-50 pb-32" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin-left: -20px; padding-left: 20px; margin-top: -20px;">
         <!-- Header -->
         <div class="bg-white shadow-sm border-b border-gray-200">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -116,10 +133,10 @@ function nds_academy_main_dashboard() {
             <!-- KPI cards -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 <!-- Students -->
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <div onclick="openStatModal('students')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Total Students</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Total Students</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
                                 <?php echo number_format_i18n($total_students); ?>
                             </p>
@@ -135,10 +152,10 @@ function nds_academy_main_dashboard() {
                 </div>
 
                 <!-- Staff -->
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <div onclick="openStatModal('staff')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Staff</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Staff</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
                                 <?php echo number_format_i18n($total_staff); ?>
                             </p>
@@ -154,10 +171,10 @@ function nds_academy_main_dashboard() {
                 </div>
 
                 <!-- Programs & courses -->
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <div onclick="openStatModal('programs')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Programs &amp; Courses</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Programs &amp; Courses</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
                                 <?php echo number_format_i18n($total_programs); ?>
                                 <span class="text-sm font-normal text-gray-500">programs</span>
@@ -174,10 +191,10 @@ function nds_academy_main_dashboard() {
                 </div>
 
                 <!-- Applications -->
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <div onclick="openStatModal('apps')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Applications</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Applications</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
                                 <?php echo number_format_i18n($total_applications); ?>
                             </p>
@@ -438,5 +455,157 @@ function nds_academy_main_dashboard() {
             </div>
         </div>
     </div>
+
+    <!-- Drill-down Stat Modal -->
+    <div id="drillDownModal" class="hidden" style="position:fixed; inset:0; z-index:999999; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5);" onclick="closeStatModal()"></div>
+        <div style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:1rem;">
+            <div style="background:#fff; border-radius:1rem; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); width:100%; max-width:42rem; max-height:80vh; display:flex; flex-direction:column; position:relative;">
+                <!-- Modal Header -->
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:1rem 1.5rem; border-bottom:1px solid #e5e7eb;">
+                    <div style="display:flex; align-items:center; gap:0.75rem;">
+                        <div id="modalIconBg" style="width:2.5rem; height:2.5rem; border-radius:0.5rem; display:flex; align-items:center; justify-content:center;">
+                            <i id="modalIcon" style="font-size:1.25rem;"></i>
+                        </div>
+                        <div>
+                            <h3 id="modalTitle" style="font-size:1.125rem; font-weight:700; color:#111827; margin:0;"></h3>
+                            <p id="modalCount" style="font-size:0.875rem; color:#6b7280; margin:0;"></p>
+                        </div>
+                    </div>
+                    <button onclick="closeStatModal()" style="color:#9ca3af; padding:0.5rem; border-radius:0.5rem; border:none; background:none; cursor:pointer;" onmouseover="this.style.color='#4b5563'; this.style.background='#f3f4f6'" onmouseout="this.style.color='#9ca3af'; this.style.background='none'">
+                        <i class="fas fa-times" style="font-size:1.25rem;"></i>
+                    </button>
+                </div>
+                <!-- Modal Body -->
+                <div style="overflow-y:auto; flex:1; padding:0.5rem;">
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead style="background:#f9fafb; position:sticky; top:0; z-index:10;">
+                            <tr>
+                                <th id="col1Header" style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; font-weight:500; color:#6b7280; text-transform:uppercase;">Name</th>
+                                <th id="col2Header" style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; font-weight:500; color:#6b7280; text-transform:uppercase;">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modalBody"></tbody>
+                    </table>
+                </div>
+                <!-- Modal Footer -->
+                <div style="padding:0.75rem 1.5rem; border-top:1px solid #e5e7eb; background:#f9fafb; border-radius:0 0 1rem 1rem; text-align:right;">
+                    <button onclick="closeStatModal()" style="padding:0.5rem 1rem; font-size:0.875rem; font-weight:500; color:#374151; background:#fff; border:1px solid #d1d5db; border-radius:0.5rem; cursor:pointer;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#fff'">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const statsData = {
+            students: <?php echo json_encode($all_students_list); ?>,
+            staff: <?php echo json_encode($all_staff_list); ?>,
+            programs: <?php echo json_encode($all_programs_list); ?>,
+            apps: <?php echo json_encode($all_apps_list); ?>
+        };
+
+        const modalConfig = {
+            students: {
+                title: 'All Students',
+                icon: 'fas fa-users',
+                iconColor: '#2563eb',
+                iconBg: '#eff6ff',
+                targetPage: 'nds-students',
+                col1: 'Name',
+                col2: 'ID'
+            },
+            staff: {
+                title: 'Staff Members',
+                icon: 'fas fa-id-badge',
+                iconColor: '#059669',
+                iconBg: '#ecfdf5',
+                targetPage: 'nds-staff',
+                col1: 'Name',
+                col2: 'Role'
+            },
+            programs: {
+                title: 'Academic Programs',
+                icon: 'fas fa-graduation-cap',
+                iconColor: '#4f46e5',
+                iconBg: '#eef2ff',
+                targetPage: 'nds-programs',
+                col1: 'Program Name',
+                col2: 'Description'
+            },
+            apps: {
+                title: 'Recent Applications',
+                icon: 'fas fa-clipboard-list',
+                iconColor: '#d97706',
+                iconBg: '#fffbeb',
+                targetPage: 'nds-applicants',
+                col1: 'Applicant',
+                col2: 'Course'
+            }
+        };
+
+        window.openStatModal = function(type) {
+            const modal = document.getElementById('drillDownModal');
+            const config = modalConfig[type];
+            const data = statsData[type];
+            
+            if (!modal || !config || !data) return;
+
+            document.getElementById('modalTitle').textContent = config.title;
+            document.getElementById('modalCount').textContent = data.length + ' item' + (data.length !== 1 ? 's' : '');
+            document.getElementById('col1Header').textContent = config.col1;
+            document.getElementById('col2Header').textContent = config.col2;
+            
+            const modalIcon = document.getElementById('modalIcon');
+            const modalIconBg = document.getElementById('modalIconBg');
+            modalIcon.className = config.icon;
+            modalIcon.style.color = config.iconColor;
+            modalIconBg.style.backgroundColor = config.iconBg;
+
+            const tbody = document.getElementById('modalBody');
+            tbody.innerHTML = '';
+            
+            data.forEach(item => {
+                const row = document.createElement('tr');
+                row.style.cssText = 'border-bottom:1px solid #f3f4f6; transition: background 0.15s; cursor: pointer;';
+                row.onclick = () => window.location.href = `admin.php?page=${config.targetPage}`;
+                row.onmouseover = function() { this.style.background = '#f9fafb'; };
+                row.onmouseout = function() { this.style.background = ''; };
+                
+                let name = '', details = '';
+                if (type === 'students') {
+                    name = `${item.first_name || ''} ${item.last_name || ''}`;
+                    details = item.student_number || 'N/A';
+                } else if (type === 'staff') {
+                    name = `${item.first_name || ''} ${item.last_name || ''}`;
+                    details = item.role || 'Staff';
+                } else if (type === 'programs') {
+                    name = item.name;
+                    details = item.description ? item.description.substring(0, 60) + '...' : 'N/A';
+                } else if (type === 'apps') {
+                    name = item.full_name || 'N/A';
+                    details = item.application_no || 'N/A';
+                }
+
+                row.innerHTML = `
+                    <td style="padding:0.75rem 1rem; font-size:0.875rem; font-weight:600; color:#111827;">${name}</td>
+                    <td style="padding:0.75rem 1rem; font-size:0.875rem; color:#4b5563;">${details}</td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            modal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        };
+
+        window.closeStatModal = function() {
+            const modal = document.getElementById('drillDownModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                document.body.style.overflow = '';
+            }
+        };
+    });
+    </script>
     <?php
 }

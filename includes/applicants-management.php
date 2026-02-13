@@ -155,28 +155,34 @@ function nds_applicants_dashboard() {
     }
     wp_enqueue_style('nds-icons', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css', array(), null, 'all');
 
-    // Build status stats map - exclude 'accepted' and 'converted_to_student' to match displayed data
-    $stats_rows = $wpdb->get_results("
-        SELECT 
-            status,
-            COUNT(*) as count
-        FROM {$wpdb->prefix}nds_applications 
-        WHERE status != 'converted_to_student'
-          AND status != 'accepted'
-        GROUP BY status
+    // Build status stats lists for modals
+    $all_active_applications = $wpdb->get_results("
+        SELECT a.id, a.application_no, af.full_name, af.course_name, a.status, a.submitted_at
+        FROM {$wpdb->prefix}nds_applications a
+        LEFT JOIN {$wpdb->prefix}nds_application_forms af ON a.id = af.application_id
+        WHERE a.status != 'converted_to_student'
+          AND a.status != 'accepted'
+        GROUP BY a.id
+        ORDER BY a.submitted_at DESC
     ", ARRAY_A);
 
-    $status_counts = array();
-    foreach ($stats_rows as $row) {
-        $status_counts[$row['status']] = (int) $row['count'];
-    }
+    $submitted_list    = array_values(array_filter($all_active_applications, function($a) { return $a['status'] === 'submitted'; }));
+    $under_review_list = array_values(array_filter($all_active_applications, function($a) { return $a['status'] === 'under_review'; }));
+    $accepted_list     = array_values(array_filter($all_active_applications, function($a) { 
+        return in_array($a['status'], array('accepted', 'offer_made', 'conditional_offer')); 
+    }));
 
-    $total_applications   = (int) $total_count;
-    $submitted_count      = $status_counts['submitted'] ?? 0;
-    $under_review_count   = $status_counts['under_review'] ?? 0;
-    $accepted_count       = $status_counts['accepted'] ?? 0;
+    $total_applications   = count($all_active_applications);
+    $submitted_count      = count($submitted_list);
+    $under_review_count   = count($under_review_list);
+    $accepted_count       = count($accepted_list);
     ?>
-    <div class="nds-tailwind-wrapper bg-gray-50 min-h-screen" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <style>
+        /* Ensure the WordPress footer doesn't overlap our custom dashboard */
+        body[class*="nds-applicants"] #wpfooter, body[class*="nds-applications"] #wpfooter { display: none !important; }
+        .nds-tailwind-wrapper { position: relative; z-index: 1; }
+    </style>
+    <div class="nds-tailwind-wrapper bg-gray-50 pb-32" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin-left: -20px; padding-left: 20px; margin-top: -20px;">
         <!-- Header -->
         <div class="bg-white shadow-sm border-b border-gray-200">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -229,58 +235,62 @@ function nds_applicants_dashboard() {
         
             <!-- KPI Cards -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <!-- Total Applications -->
+                <div onclick="openStatModal('total')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Total Applications</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Total Applications</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
                                 <?php echo number_format_i18n($total_applications); ?>
                             </p>
                         </div>
                         <div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
-                            <span class="dashicons dashicons-clipboard text-blue-600 text-xl"></span>
+                            <i class="fas fa-clipboard-list text-blue-600 text-xl"></i>
                         </div>
                     </div>
                 </div>
 
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <!-- Submitted -->
+                <div onclick="openStatModal('submitted')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Submitted</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Submitted</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
                                 <?php echo number_format_i18n($submitted_count); ?>
                             </p>
                         </div>
                         <div class="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center">
-                            <span class="dashicons dashicons-media-text text-indigo-600 text-xl"></span>
+                            <i class="fas fa-file-signature text-indigo-600 text-xl"></i>
                         </div>
                     </div>
                 </div>
 
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <!-- Under Review -->
+                <div onclick="openStatModal('review')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Under Review</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Under Review</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
                                 <?php echo number_format_i18n($under_review_count); ?>
                             </p>
                         </div>
                         <div class="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center">
-                            <span class="dashicons dashicons-visibility text-amber-600 text-xl"></span>
+                            <i class="fas fa-search text-amber-600 text-xl"></i>
                         </div>
                     </div>
-        </div>
+                </div>
         
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <!-- Accepted -->
+                <div onclick="openStatModal('accepted')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Accepted</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Accepted</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
                                 <?php echo number_format_i18n($accepted_count); ?>
                             </p>
                         </div>
                         <div class="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
-                            <span class="dashicons dashicons-yes-alt text-emerald-600 text-xl"></span>
+                            <i class="fas fa-check-double text-emerald-600 text-xl"></i>
                         </div>
                     </div>
                 </div>
@@ -477,6 +487,14 @@ function nds_applicants_dashboard() {
                                       placeholder="Add any review notes or context for this decision..."></textarea>
                         </div>
 
+                        <div>
+                            <label class="flex items-center space-x-3 cursor-pointer">
+                                <input type="checkbox" name="notify_applicant" id="notify_applicant" value="1" checked
+                                       class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                                <span class="text-sm font-medium text-gray-900">Notify applicant via email</span>
+                            </label>
+                        </div>
+
                         <div class="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
                             <button type="button"
                                     class="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium"
@@ -495,8 +513,116 @@ function nds_applicants_dashboard() {
         </div>
     </div>
     
+    <!-- Drill-down Stat Modal -->
+    <div id="drillDownModal" class="hidden" style="position:fixed; inset:0; z-index:999999; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5);" onclick="closeDrillDownModal()"></div>
+        <div style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:1rem;">
+            <div style="background:#fff; border-radius:1rem; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); width:100%; max-width:42rem; max-height:80vh; display:flex; flex-direction:column; position:relative;">
+                <!-- Modal Header -->
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:1rem 1.5rem; border-bottom:1px solid #e5e7eb;">
+                    <div style="display:flex; align-items:center; gap:0.75rem;">
+                        <div id="drillModalIconBg" style="width:2.5rem; height:2.5rem; border-radius:0.5rem; display:flex; align-items:center; justify-content:center;">
+                            <i id="drillModalIcon" style="font-size:1.25rem;"></i>
+                        </div>
+                        <div>
+                            <h3 id="drillModalTitle" style="font-size:1.125rem; font-weight:700; color:#111827; margin:0;"></h3>
+                            <p id="drillModalCount" style="font-size:0.875rem; color:#6b7280; margin:0;"></p>
+                        </div>
+                    </div>
+                    <button onclick="closeDrillDownModal()" style="color:#9ca3af; padding:0.5rem; border-radius:0.5rem; border:none; background:none; cursor:pointer;" onmouseover="this.style.color='#4b5563'; this.style.background='#f3f4f6'" onmouseout="this.style.color='#9ca3af'; this.style.background='none'">
+                        <i class="fas fa-times" style="font-size:1.25rem;"></i>
+                    </button>
+                </div>
+                <!-- Modal Body -->
+                <div style="overflow-y:auto; flex:1; padding:0.5rem;">
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead style="background:#f9fafb; position:sticky; top:0; z-index:10;">
+                            <tr>
+                                <th style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; font-weight:500; color:#6b7280; text-transform:uppercase;">Applicant</th>
+                                <th style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; font-weight:500; color:#6b7280; text-transform:uppercase;">Course</th>
+                                <th style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; font-weight:500; color:#6b7280; text-transform:uppercase;">Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="drillModalBody"></tbody>
+                    </table>
+                </div>
+                <!-- Modal Footer -->
+                <div style="padding:0.75rem 1.5rem; border-top:1px solid #e5e7eb; background:#f9fafb; border-radius:0 0 1rem 1rem; text-align:right;">
+                    <button onclick="closeDrillDownModal()" style="padding:0.5rem 1rem; font-size:0.875rem; font-weight:500; color:#374151; background:#fff; border:1px solid #d1d5db; border-radius:0.5rem; cursor:pointer;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#fff'">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // --- DRILL-DOWN MODAL LOGIC ---
+        const statsData = {
+            total: <?php echo json_encode($all_active_applications); ?>,
+            submitted: <?php echo json_encode($submitted_list); ?>,
+            review: <?php echo json_encode($under_review_list); ?>,
+            accepted: <?php echo json_encode($accepted_list); ?>
+        };
+
+        const modalConfig = {
+            total: { title: 'All Applications', icon: 'fas fa-clipboard-list', iconColor: '#2563eb', iconBg: '#eff6ff' },
+            submitted: { title: 'Submitted Applications', icon: 'fas fa-file-signature', iconColor: '#4f46e5', iconBg: '#eef2ff' },
+            review: { title: 'Applications Under Review', icon: 'fas fa-search', iconColor: '#d97706', iconBg: '#fffbeb' },
+            accepted: { title: 'Accepted Applications', icon: 'fas fa-check-double', iconColor: '#059669', iconBg: '#ecfdf5' }
+        };
+
+        window.openStatModal = function(type) {
+            const modal = document.getElementById('drillDownModal');
+            const config = modalConfig[type];
+            const data = statsData[type];
+            
+            if (!modal || !config || !data) return;
+
+            document.getElementById('drillModalTitle').textContent = config.title;
+            document.getElementById('drillModalCount').textContent = data.length + ' application' + (data.length !== 1 ? 's' : '');
+            
+            const icon = document.getElementById('drillModalIcon');
+            const iconBg = document.getElementById('drillModalIconBg');
+            icon.className = config.icon;
+            icon.style.color = config.iconColor;
+            iconBg.style.backgroundColor = config.iconBg;
+
+            const tbody = document.getElementById('drillModalBody');
+            tbody.innerHTML = '';
+            
+            data.forEach(item => {
+                const row = document.createElement('tr');
+                row.style.cssText = 'border-bottom:1px solid #f3f4f6; transition: background 0.15s; cursor: pointer;';
+                row.onclick = () => window.location.href = `<?php echo admin_url('admin.php?page=nds-applicants&action=view&id='); ?>${item.id}`;
+                row.onmouseover = function() { this.style.background = '#f9fafb'; };
+                row.onmouseout = function() { this.style.background = ''; };
+                
+                const date = new Date(item.submitted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+
+                row.innerHTML = `
+                    <td style="padding:0.75rem 1rem;">
+                        <div style="font-size:0.875rem; font-weight:600; color:#111827;">${item.full_name || 'N/A'}</div>
+                        <div style="font-size:0.75rem; color:#6b7280;">${item.application_no}</div>
+                    </td>
+                    <td style="padding:0.75rem 1rem; font-size:0.875rem; color:#4b5563;">${item.course_name || 'N/A'}</td>
+                    <td style="padding:0.75rem 1rem; font-size:0.875rem; color:#6b7280;">${date}</td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            modal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        };
+
+        window.closeDrillDownModal = function() {
+            const modal = document.getElementById('drillDownModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                document.body.style.overflow = '';
+            }
+        };
+
+        // --- EXISTING MODAL LOGIC ---
         const selectAllCheckbox = document.getElementById('select-all-applications');
         const bulkActionButton = document.getElementById('bulk-action-apply');
         const bulkActionSelector = document.getElementById('bulk-action-selector');
@@ -504,10 +630,10 @@ function nds_applicants_dashboard() {
 
         if (selectAllCheckbox) {
             selectAllCheckbox.addEventListener('change', function() {
-            const checkboxes = document.querySelectorAll('.application-checkbox');
-            checkboxes.forEach(cb => cb.checked = this.checked);
-            updateBulkActionButton();
-        });
+                const checkboxes = document.querySelectorAll('.application-checkbox');
+                checkboxes.forEach(cb => cb.checked = this.checked);
+                updateBulkActionButton();
+            });
         }
         
         document.querySelectorAll('.application-checkbox').forEach(cb => {
@@ -526,89 +652,34 @@ function nds_applicants_dashboard() {
             }
         }
         
-        // Ensure modal is attached directly to <body> so it centers over full viewport
         if (statusModal && statusModal.parentElement !== document.body) {
             document.body.appendChild(statusModal);
         }
 
-        function openStatusModal(id, status) {
+        window.openStatusModal = function(id, status) {
             const modal = document.getElementById('status-modal');
             const idField = document.getElementById('modal-application-id');
             const statusField = document.getElementById('new_status');
 
-            // #region agent log: dashboard openStatusModal
-            fetch('http://127.0.0.1:7247/ingest/dd126561-a5b5-4577-8b70-512cd5168604', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sessionId: 'debug-session',
-                    runId: 'dashboard-open-modal',
-                    hypothesisId: 'H_modal_6',
-                    location: 'applicants-management.php:dashboard-openStatusModal',
-                    message: 'openStatusModal called',
-                    data: {
-                        id,
-                        status,
-                        hasModal: !!modal,
-                        hasIdField: !!idField,
-                        hasStatusField: !!statusField
-                    },
-                    timestamp: Date.now()
-                })
-            }).catch(() => {});
-            // #endregion
-
-            if (idField && id) {
-                idField.value = id;
-            }
-            if (statusField && status) {
-                statusField.value = status;
-            }
+            if (idField && id) idField.value = id;
+            if (statusField && status) statusField.value = status;
 
             if (modal) {
                 modal.classList.remove('hidden');
-                modal.classList.add('flex', 'items-center', 'justify-center');
                 modal.style.display = 'flex';
                 document.body.style.overflow = 'hidden';
-
-                // #region agent log: dashboard modal shown
-                const computedStyle = window.getComputedStyle(modal);
-                fetch('http://127.0.0.1:7247/ingest/dd126561-a5b5-4577-8b70-512cd5168604', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        sessionId: 'debug-session',
-                        runId: 'dashboard-open-modal',
-                        hypothesisId: 'H_modal_7',
-                        location: 'applicants-management.php:dashboard-openStatusModal-after',
-                        message: 'After trying to show modal',
-                        data: {
-                            display: computedStyle.display,
-                            visibility: computedStyle.visibility,
-                            zIndex: computedStyle.zIndex,
-                            hasHiddenClass: modal.classList.contains('hidden')
-                        },
-                        timestamp: Date.now()
-                    })
-                }).catch(() => {});
-                // #endregion
             }
-        }
+        };
         
-        // Update status buttons
         document.querySelectorAll('.update-status-btn').forEach(btn => {
             btn.addEventListener('click', function() {
-                const id = this.getAttribute('data-id');
-                const status = this.getAttribute('data-status');
-                openStatusModal(id, status);
+                openStatusModal(this.getAttribute('data-id'), this.getAttribute('data-status'));
             });
         });
         
         if (statusModal) {
             statusModal.addEventListener('click', function(e) {
-                if (e.target === statusModal) {
-                    ndsCloseStatusModal();
-                }
+                if (e.target === statusModal) ndsCloseStatusModal();
             });
         }
     });
@@ -617,7 +688,6 @@ function nds_applicants_dashboard() {
         const statusModal = document.getElementById('status-modal');
         if (statusModal) {
             statusModal.classList.add('hidden');
-            statusModal.classList.remove('flex', 'items-center', 'justify-center');
             statusModal.style.display = 'none';
             document.body.style.overflow = '';
         }
@@ -729,7 +799,7 @@ function nds_view_application_details($application_id) {
     }
 
     ?>
-    <div class="nds-tailwind-wrapper bg-gray-50 min-h-screen">
+    <div class="nds-tailwind-wrapper bg-gray-50 pb-32" style="margin-left: -20px; padding-left: 20px; margin-top: -20px;">
         <!-- Header -->
         <div class="bg-white shadow-sm border-b border-gray-200">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -1321,6 +1391,22 @@ function nds_update_application_status($application_id, $new_status, $notes = ''
         $update_formats,
         ['%d']
     );
+
+    // Fetch student_id for logging if it's already linked
+    $student_id_for_log = $wpdb->get_var($wpdb->prepare(
+        "SELECT student_id FROM {$wpdb->prefix}nds_applications WHERE id = %d",
+        $application_id
+    ));
+    if ($student_id_for_log && function_exists('nds_log_student_activity')) {
+        nds_log_student_activity(
+            $student_id_for_log,
+            get_current_user_id(),
+            "Application status updated to " . str_replace('_', ' ', $new_status),
+            'update',
+            ['old_status' => $current_status],
+            ['new_status' => $new_status, 'notes' => $notes]
+        );
+    }
     
     // Always run enrollment logic if status is 'accepted' (even if already accepted - to handle missed enrollments)
     $should_enroll = ($new_status === 'accepted');
@@ -1672,458 +1758,119 @@ function nds_enroll_student_from_application($application_id, $student_id = null
         return false;
     }
     
-    // Get application form data to find the course/program name
-    $app_form = $wpdb->get_row(
+    // 1. Get IDs directly from the applications table (preferred)
+    $app_data = $wpdb->get_row(
         $wpdb->prepare(
-            "SELECT course_name FROM {$forms_table} WHERE application_id = %d",
+            "SELECT program_id, course_id FROM {$apps_table} WHERE id = %d",
             $application_id
         ),
         ARRAY_A
     );
 
-    // #region agent log: enrollment function - course_name at start
-    @file_put_contents(
-        __DIR__ . '/../.cursor/debug.log',
-        json_encode(array(
-            'sessionId' => 'debug-session',
-            'runId' => 'course-destroy-pre',
-            'hypothesisId' => 'H_course_3',
-            'location' => 'applicants-management.php:enroll_function_start',
-            'message' => 'Enrollment function - course_name at start',
-            'data' => array(
-                'application_id' => $application_id,
-                'student_id' => $student_id,
-                'has_app_form' => !empty($app_form),
-                'course_name' => $app_form['course_name'] ?? '',
+    $program_id = !empty($app_data['program_id']) ? (int) $app_data['program_id'] : 0;
+    $course_id  = !empty($app_data['course_id']) ? (int) $app_data['course_id'] : 0;
+
+    // 2. Fallback to name-based lookup for legacy records or missing IDs
+    if ($program_id <= 0 && $course_id <= 0) {
+        $app_form = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT course_name, course_id FROM {$forms_table} WHERE application_id = %d",
+                $application_id
             ),
-            'timestamp' => round(microtime(true) * 1000),
-        )) . PHP_EOL,
-        FILE_APPEND
+            ARRAY_A
+        );
+
+        if (!empty($app_form['course_id'])) {
+            $course_id = (int) $app_form['course_id'];
+        }
+
+        if ($program_id <= 0 && $course_id <= 0 && !empty($app_form['course_name'])) {
+            $course_name = trim($app_form['course_name']);
+            $course_name_clean = preg_replace('/\s*\(NQF\s+\d+\)\s*$/i', '', $course_name);
+            
+            // Try program name
+            $program_id = (int) $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM {$wpdb->prefix}nds_programs WHERE name = %s OR name = %s AND status = 'active' LIMIT 1",
+                $course_name_clean, $course_name
+            ));
+
+            if (!$program_id) {
+                // Try course name
+                $course_id = (int) $wpdb->get_var($wpdb->prepare(
+                    "SELECT id FROM {$wpdb->prefix}nds_courses WHERE name = %s OR name = %s AND status = 'active' LIMIT 1",
+                    $course_name_clean, $course_name
+                ));
+            }
+        }
+    }
+
+    // Resolve program_id if we only have course_id
+    if ($program_id <= 0 && $course_id > 0) {
+        $program_id = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT program_id FROM {$wpdb->prefix}nds_courses WHERE id = %d",
+            $course_id
+        ));
+    }
+
+    if ($program_id <= 0) {
+        // Log failure
+        return false;
+    }
+
+    // 3. Get Active Year and Semester
+    $app_year_semester = $wpdb->get_row(
+        $wpdb->prepare(
+            "SELECT academic_year_id, semester_id FROM {$apps_table} WHERE id = %d",
+            $application_id
+        ),
+        ARRAY_A
     );
-    // #endregion
 
-                    if (!empty($app_form['course_name'])) {
-                        $course_name = trim($app_form['course_name']);
-                        
-                        // #region agent log: course_name lookup start
-                        @file_put_contents(
-                            __DIR__ . '/../.cursor/debug.log',
-                            json_encode(array(
-                                'sessionId' => 'debug-session',
-                                'runId' => 'enroll-pre',
-                                'hypothesisId' => 'H_enroll_1',
-                                'location' => 'applicants-management.php:course_name_lookup',
-                                'message' => 'Starting course/program lookup for enrollment',
-                                'data' => array(
-                                    'course_name' => $course_name,
-                                    'student_id' => $student_id,
-                                ),
-                                'timestamp' => round(microtime(true) * 1000),
-                            )) . PHP_EOL,
-                            FILE_APPEND
-                        );
-                        // #endregion
-                        
-                        // Clean course_name: Remove NQF level suffix like "(NQF 3)" for better matching
-                        // Application form might have "Course Name (NQF 3)" but database has "Course Name"
-                        $course_name_clean = preg_replace('/\s*\(NQF\s+\d+\)\s*$/i', '', $course_name);
-                        $course_name_clean = trim($course_name_clean);
-                        
-                        // Try to find a program by name first (course_name might be the program name)
-                        $program = $wpdb->get_row(
-                            $wpdb->prepare(
-                                "SELECT id FROM {$wpdb->prefix}nds_programs WHERE name = %s AND status = 'active' LIMIT 1",
-                                $course_name_clean
-                            ),
-                            ARRAY_A
-                        );
-                        
-                        // If exact match failed, try with original course_name (in case it IS the program name with NQF)
-                        if (!$program) {
-                            $program = $wpdb->get_row(
-                                $wpdb->prepare(
-                                    "SELECT id FROM {$wpdb->prefix}nds_programs WHERE name = %s AND status = 'active' LIMIT 1",
-                                    $course_name
-                                ),
-                                ARRAY_A
-                            );
-                        }
+    $active_year_id = !empty($app_year_semester['academic_year_id']) ? (int) $app_year_semester['academic_year_id'] : 0;
+    $active_semester_id = !empty($app_year_semester['semester_id']) ? (int) $app_year_semester['semester_id'] : 0;
 
-                        // #region agent log: program lookup by name result
-                        @file_put_contents(
-                            __DIR__ . '/../.cursor/debug.log',
-                            json_encode(array(
-                                'sessionId' => 'debug-session',
-                                'runId' => 'enroll-pre',
-                                'hypothesisId' => 'H_enroll_2',
-                                'location' => 'applicants-management.php:program_lookup_name',
-                                'message' => 'Program lookup by name result',
-                                'data' => array(
-                                    'found_program' => !empty($program),
-                                    'program_id' => !empty($program) ? (int) $program['id'] : 0,
-                                    'course_name_original' => $course_name,
-                                    'course_name_clean' => $course_name_clean,
-                                ),
-                                'timestamp' => round(microtime(true) * 1000),
-                            )) . PHP_EOL,
-                            FILE_APPEND
-                        );
-                        // #endregion
+    if (!$active_year_id) {
+        $active_year_id = (int) $wpdb->get_var("SELECT id FROM {$wpdb->prefix}nds_academic_years WHERE is_active = 1 ORDER BY id DESC LIMIT 1");
+    }
+    if (!$active_semester_id) {
+        $active_semester_id = (int) $wpdb->get_var("SELECT id FROM {$wpdb->prefix}nds_semesters WHERE is_active = 1 ORDER BY id DESC LIMIT 1");
+    }
 
-                        // If no program found by name, try to find a course with that name and get its program
-                        if (!$program) {
-                            // Try with cleaned name first (without NQF suffix)
-                            $course = $wpdb->get_row(
-                                $wpdb->prepare(
-                                    "SELECT program_id FROM {$wpdb->prefix}nds_courses WHERE name = %s AND status = 'active' LIMIT 1",
-                                    $course_name_clean
-                                ),
-                                ARRAY_A
-                            );
-                            
-                            // If that failed, try with original name (in case database has NQF suffix)
-                            if (!$course) {
-                                $course = $wpdb->get_row(
-                                    $wpdb->prepare(
-                                        "SELECT program_id FROM {$wpdb->prefix}nds_courses WHERE name = %s AND status = 'active' LIMIT 1",
-                                        $course_name
-                                    ),
-                                    ARRAY_A
-                                );
-                            }
-                            
-                            // #region agent log: course lookup result
-                            @file_put_contents(
-                                __DIR__ . '/../.cursor/debug.log',
-                                json_encode(array(
-                                    'sessionId' => 'debug-session',
-                                    'runId' => 'enroll-pre',
-                                    'hypothesisId' => 'H_enroll_3',
-                                    'location' => 'applicants-management.php:course_lookup',
-                                    'message' => 'Course lookup by name result',
-                                    'data' => array(
-                                        'found_course' => !empty($course),
-                                        'program_id_from_course' => !empty($course) ? (int) ($course['program_id'] ?? 0) : 0,
-                                        'course_name_original' => $course_name,
-                                        'course_name_clean' => $course_name_clean,
-                                    ),
-                                    'timestamp' => round(microtime(true) * 1000),
-                                )) . PHP_EOL,
-                                FILE_APPEND
-                            );
-                            // #endregion
-                            
-                            if ($course && !empty($course['program_id'])) {
-                                $program = ['id' => $course['program_id']];
-                            }
-                        }
+    // Fallback to latest if no active
+    if (!$active_year_id) $active_year_id = (int) $wpdb->get_var("SELECT id FROM {$wpdb->prefix}nds_academic_years ORDER BY id DESC LIMIT 1");
+    if (!$active_semester_id) $active_semester_id = (int) $wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}nds_semesters WHERE academic_year_id = %d ORDER BY id DESC LIMIT 1", $active_year_id));
 
-                        // If we found a program, enroll student in all its courses
-                        if ($program && !empty($program['id'])) {
-                            // #region agent log: program found, proceeding to enrollment
-                            @file_put_contents(
-                                __DIR__ . '/../.cursor/debug.log',
-                                json_encode(array(
-                                    'sessionId' => 'debug-session',
-                                    'runId' => 'enroll-pre',
-                                    'hypothesisId' => 'H_enroll_4',
-                                    'location' => 'applicants-management.php:program_found',
-                                    'message' => 'Program found, checking active year/semester',
-                                    'data' => array(
-                                        'program_id' => (int) $program['id'],
-                                        'student_id' => $student_id,
-                                    ),
-                                    'timestamp' => round(microtime(true) * 1000),
-                                )) . PHP_EOL,
-                                FILE_APPEND
-                            );
-                            // #endregion
-                            $program_id = (int) $program['id'];
-                            
-                            // First, try to use academic_year_id and semester_id from the application itself
-                            $app_year_semester = $wpdb->get_row(
-                                $wpdb->prepare(
-                                    "SELECT academic_year_id, semester_id FROM {$apps_table} WHERE id = %d",
-                                    $application_id
-                                ),
-                                ARRAY_A
-                            );
-                            
-                            $active_year = null;
-                            $active_semester = null;
-                            
-                            // If application has academic_year_id and semester_id set, use those
-                            if (!empty($app_year_semester['academic_year_id']) && !empty($app_year_semester['semester_id'])) {
-                                $active_year = $wpdb->get_row(
-                                    $wpdb->prepare(
-                                        "SELECT * FROM {$wpdb->prefix}nds_academic_years WHERE id = %d",
-                                        (int) $app_year_semester['academic_year_id']
-                                    ),
-                                    ARRAY_A
-                                );
-                                $active_semester = $wpdb->get_row(
-                                    $wpdb->prepare(
-                                        "SELECT * FROM {$wpdb->prefix}nds_semesters WHERE id = %d",
-                                        (int) $app_year_semester['semester_id']
-                                    ),
-                                    ARRAY_A
-                                );
-                            }
-                            
-                            // Fallback: Get active academic year and semester if not set on application
-                            if (!$active_year) {
-                                $active_year = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}nds_academic_years WHERE is_active = 1 ORDER BY id DESC LIMIT 1", ARRAY_A);
-                            }
-                            if (!$active_semester) {
-                                $active_semester = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}nds_semesters WHERE is_active = 1 ORDER BY id DESC LIMIT 1", ARRAY_A);
-                            }
+    if (!$active_year_id || !$active_semester_id) {
+        return false;
+    }
 
-                            // Fallback: if no explicitly active year/semester, use the most recent ones instead of blocking enrollment
-                            if (!$active_year) {
-                                $active_year = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}nds_academic_years ORDER BY id DESC LIMIT 1", ARRAY_A);
-                            }
-                            if ($active_year && !$active_semester) {
-                                $active_semester = $wpdb->get_row(
-                                    $wpdb->prepare(
-                                        "SELECT * FROM {$wpdb->prefix}nds_semesters WHERE academic_year_id = %d ORDER BY id DESC LIMIT 1",
-                                        (int) $active_year['id']
-                                    ),
-                                    ARRAY_A
-                                );
-                            }
+    // 4. Enroll in all courses of the program
+    $courses = $wpdb->get_results($wpdb->prepare(
+        "SELECT id FROM {$wpdb->prefix}nds_courses WHERE program_id = %d AND status = 'active'",
+        $program_id
+    ));
 
-                            // If we still don't have a year/semester, auto-create a sensible default so enrollment can proceed
-                            if (!$active_year) {
-                                $current_year = (int) date('Y');
-                                $year_name    = $current_year . '/' . ($current_year + 1);
-                                $year_insert  = $wpdb->insert(
-                                    "{$wpdb->prefix}nds_academic_years",
-                                    array(
-                                        'year_name'  => $year_name,
-                                        'start_date' => $current_year . '-01-01',
-                                        'end_date'   => ($current_year + 1) . '-12-31',
-                                        'is_active'  => 1,
-                                    ),
-                                    array('%s', '%s', '%s', '%d')
-                                );
+    $enrollments_table = $wpdb->prefix . 'nds_student_enrollments';
+    foreach ($courses as $course) {
+        $cid = (int) $course->id;
+        $exists = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$enrollments_table} WHERE student_id = %d AND course_id = %d AND academic_year_id = %d AND semester_id = %d",
+            $student_id, $cid, $active_year_id, $active_semester_id
+        ));
 
-                                if ($year_insert !== false) {
-                                    $active_year = $wpdb->get_row(
-                                        $wpdb->prepare(
-                                            "SELECT * FROM {$wpdb->prefix}nds_academic_years WHERE id = %d",
-                                            (int) $wpdb->insert_id
-                                        ),
-                                        ARRAY_A
-                                    );
-                                }
-                            }
+        if (!$exists) {
+            $wpdb->insert($enrollments_table, [
+                'student_id' => $student_id,
+                'course_id' => $cid,
+                'academic_year_id' => $active_year_id,
+                'semester_id' => $active_semester_id,
+                'enrollment_date' => current_time('Y-m-d'),
+                'status' => 'enrolled',
+                'created_at' => current_time('mysql')
+            ]);
+        }
+    }
 
-                            if ($active_year && !$active_semester) {
-                                $semester_insert = $wpdb->insert(
-                                    "{$wpdb->prefix}nds_semesters",
-                                    array(
-                                        'academic_year_id' => (int) $active_year['id'],
-                                        'semester_name'    => 'Default',
-                                        'start_date'       => $active_year['start_date'],
-                                        'end_date'         => $active_year['end_date'],
-                                        'is_active'        => 1,
-                                    ),
-                                    array('%d', '%s', '%s', '%s', '%d')
-                                );
-
-                                if ($semester_insert !== false) {
-                                    $active_semester = $wpdb->get_row(
-                                        $wpdb->prepare(
-                                            "SELECT * FROM {$wpdb->prefix}nds_semesters WHERE id = %d",
-                                            (int) $wpdb->insert_id
-                                        ),
-                                        ARRAY_A
-                                    );
-                                }
-                            }
-
-                            if ($active_year && $active_semester) {
-                                // #region agent log: active year/semester found
-                                @file_put_contents(
-                                    __DIR__ . '/../.cursor/debug.log',
-                                    json_encode(array(
-                                        'sessionId' => 'debug-session',
-                                        'runId' => 'enroll-pre',
-                                        'hypothesisId' => 'H_enroll_7',
-                                        'location' => 'applicants-management.php:active_term_found',
-                                        'message' => 'Active academic year and semester found',
-                                        'data' => array(
-                                            'year_id' => (int) ($active_year['id'] ?? 0),
-                                            'semester_id' => (int) ($active_semester['id'] ?? 0),
-                                        ),
-                                        'timestamp' => round(microtime(true) * 1000),
-                                    )) . PHP_EOL,
-                                    FILE_APPEND
-                                );
-                                // #endregion
-                                
-                                // Get all active courses in this program
-                                $courses = $wpdb->get_results(
-                                    $wpdb->prepare(
-                                        "SELECT id FROM {$wpdb->prefix}nds_courses WHERE program_id = %d AND status = 'active'",
-                                        $program_id
-                                    ),
-                                    ARRAY_A
-                                );
-                                
-                                $enrollments_table = $wpdb->prefix . 'nds_student_enrollments';
-
-                                // #region agent log: enrollment courses list
-                                @file_put_contents(
-                                    __DIR__ . '/../.cursor/debug.log',
-                                    json_encode(array(
-                                        'sessionId'   => 'debug-session',
-                                        'runId'       => 'enroll-pre',
-                                        'hypothesisId'=> 'H_accept_4',
-                                        'location'    => 'applicants-management.php:accepted_courses',
-                                        'message'     => 'Courses to enroll',
-                                        'data'        => array(
-                                            'course_count' => is_array($courses) ? count($courses) : 0,
-                                        ),
-                                        'timestamp'   => round(microtime(true) * 1000),
-                                    )) . PHP_EOL,
-                                    FILE_APPEND
-                                );
-                                // #endregion
-                                
-                                foreach ($courses as $course) {
-                                    $course_id = (int) $course['id'];
-                                    
-                                    // Check if already enrolled
-                                    $existing = $wpdb->get_var(
-                                        $wpdb->prepare(
-                                            "SELECT id FROM {$enrollments_table} 
-                                             WHERE student_id = %d AND course_id = %d AND academic_year_id = %d AND semester_id = %d",
-                                            $student_id, $course_id, $active_year['id'], $active_semester['id']
-                                        )
-                                    );
-                                    
-                                    if (!$existing) {
-                                        // Create enrollment
-                                        $insert_result = $wpdb->insert(
-                                            $enrollments_table,
-                                            [
-                                                'student_id' => $student_id,
-                                                'course_id' => $course_id,
-                                                'academic_year_id' => $active_year['id'],
-                                                'semester_id' => $active_semester['id'],
-                                                'enrollment_date' => current_time('Y-m-d'),
-                                                'status' => 'enrolled',
-                                                'created_at' => current_time('mysql')
-                                            ],
-                                            ['%d', '%d', '%d', '%d', '%s', '%s', '%s']
-                                        );
-                                        
-                                        // #region agent log: enrollment insert result
-                                        @file_put_contents(
-                                            __DIR__ . '/../.cursor/debug.log',
-                                            json_encode(array(
-                                                'sessionId' => 'debug-session',
-                                                'runId' => 'enroll-pre',
-                                                'hypothesisId' => 'H_enroll_5',
-                                                'location' => 'applicants-management.php:enrollment_insert',
-                                                'message' => 'Enrollment insert result',
-                                                'data' => array(
-                                                    'student_id' => $student_id,
-                                                    'course_id' => $course_id,
-                                                    'insert_success' => $insert_result !== false,
-                                                    'insert_id' => $insert_result !== false ? $wpdb->insert_id : 0,
-                                                    'wpdb_error' => $insert_result === false ? $wpdb->last_error : '',
-                                                ),
-                                                'timestamp' => round(microtime(true) * 1000),
-                                            )) . PHP_EOL,
-                                            FILE_APPEND
-                                        );
-                                        // #endregion
-                                    } else {
-                                        // #region agent log: enrollment already exists
-                                        @file_put_contents(
-                                            __DIR__ . '/../.cursor/debug.log',
-                                            json_encode(array(
-                                                'sessionId' => 'debug-session',
-                                                'runId' => 'enroll-pre',
-                                                'hypothesisId' => 'H_enroll_6',
-                                                'location' => 'applicants-management.php:enrollment_exists',
-                                                'message' => 'Enrollment already exists, skipping',
-                                                'data' => array(
-                                                    'student_id' => $student_id,
-                                                    'course_id' => $course_id,
-                                                    'existing_enrollment_id' => (int) $existing,
-                                                ),
-                                                'timestamp' => round(microtime(true) * 1000),
-                                            )) . PHP_EOL,
-                                            FILE_APPEND
-                                        );
-                                        // #endregion
-                                    }
-                                }
-                            } else {
-                                // #region agent log: missing active year or semester
-                                @file_put_contents(
-                                    __DIR__ . '/../.cursor/debug.log',
-                                    json_encode(array(
-                                        'sessionId' => 'debug-session',
-                                        'runId' => 'enroll-pre',
-                                        'hypothesisId' => 'H_enroll_8',
-                                        'location' => 'applicants-management.php:missing_active_term',
-                                        'message' => 'Missing active academic year or semester - enrollment blocked',
-                                        'data' => array(
-                                            'has_active_year' => !empty($active_year),
-                                            'has_active_semester' => !empty($active_semester),
-                                            'program_id' => $program_id,
-                                            'student_id' => $student_id,
-                                        ),
-                                        'timestamp' => round(microtime(true) * 1000),
-                                    )) . PHP_EOL,
-                                    FILE_APPEND
-                                );
-                                // #endregion
-                            }
-                        } else {
-                            // #region agent log: program not found
-                            @file_put_contents(
-                                __DIR__ . '/../.cursor/debug.log',
-                                json_encode(array(
-                                    'sessionId' => 'debug-session',
-                                    'runId' => 'enroll-pre',
-                                    'hypothesisId' => 'H_enroll_9',
-                                    'location' => 'applicants-management.php:program_not_found',
-                                    'message' => 'Program not found for course_name - enrollment blocked',
-                                    'data' => array(
-                                        'course_name' => $course_name ?? '',
-                                        'student_id' => $student_id,
-                                    ),
-                                    'timestamp' => round(microtime(true) * 1000),
-                                )) . PHP_EOL,
-                                FILE_APPEND
-                            );
-                            // #endregion
-                        }
-                    } else {
-                        // #region agent log: no course_name in application form
-                        @file_put_contents(
-                            __DIR__ . '/../.cursor/debug.log',
-                            json_encode(array(
-                                'sessionId' => 'debug-session',
-                                'runId' => 'enroll-pre',
-                                'hypothesisId' => 'H_enroll_10',
-                                'location' => 'applicants-management.php:no_course_name',
-                                'message' => 'Application form has no course_name - enrollment blocked',
-                                'data' => array(
-                                    'student_id' => $student_id,
-                                    'has_app_form' => !empty($app_form),
-                                ),
-                                'timestamp' => round(microtime(true) * 1000),
-                            )) . PHP_EOL,
-                            FILE_APPEND
-                        );
-                        // #endregion
-                    }
     return true;
 }
 

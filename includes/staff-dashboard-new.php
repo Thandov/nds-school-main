@@ -26,11 +26,22 @@ function nds_staff_dashboard_improved() {
 
     // Stats
     $total_staff = count($staff);
-    $lecturers = count(array_filter($staff, function($s) { return $s['role'] === 'Lecturer'; }));
-    $assignments = $wpdb->get_results("SELECT COUNT(*) as count FROM {$link_table}", ARRAY_A);
-    $total_assignments = $assignments ? $assignments[0]['count'] : 0;
+    $lecturers_list = array_values(array_filter($staff, function($s) { return strtolower($s['role']) === 'lecturer'; }));
+    $lecturers = count($lecturers_list);
+    
+    $admins_list = array_values(array_filter($staff, function($s) { return strtolower($s['role']) !== 'lecturer'; }));
+    
+    // Get full assignments list for modal
+    $all_assignments = $wpdb->get_results("
+        SELECT l.*, s.first_name, s.last_name, c.name as course_name 
+        FROM {$link_table} l 
+        JOIN {$staff_table} s ON l.lecturer_id = s.id 
+        JOIN {$course_table} c ON l.course_id = c.id 
+        ORDER BY l.assigned_date DESC
+    ", ARRAY_A);
+    $total_assignments = count($all_assignments);
     ?>
-    <div class="nds-tailwind-wrapper bg-gray-50 min-h-screen" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <div class="nds-tailwind-wrapper bg-gray-50 pb-12" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin-left: -20px; padding-left: 20px; margin-top: -20px;">
         <!-- Header -->
         <div class="bg-white shadow-sm border-b border-gray-200">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -63,10 +74,10 @@ function nds_staff_dashboard_improved() {
             <!-- KPI cards -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 <!-- Total Staff -->
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <div onclick="openStatModal('total_staff')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Total Staff</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Total Staff</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
                                 <?php echo number_format_i18n($total_staff); ?>
                             </p>
@@ -82,10 +93,10 @@ function nds_staff_dashboard_improved() {
                 </div>
 
                 <!-- Lecturers -->
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <div onclick="openStatModal('lecturers')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Lecturers</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Lecturers</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
                                 <?php echo number_format_i18n($lecturers); ?>
                             </p>
@@ -101,10 +112,10 @@ function nds_staff_dashboard_improved() {
                 </div>
 
                 <!-- Assignments -->
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <div onclick="openStatModal('assignments')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Assignments</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Assignments</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
                                 <?php echo number_format_i18n($total_assignments); ?>
                             </p>
@@ -120,10 +131,10 @@ function nds_staff_dashboard_improved() {
                 </div>
 
                 <!-- Admins -->
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <div onclick="openStatModal('admins')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Admins</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Admins</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
                                 <?php echo number_format_i18n($total_staff - $lecturers); ?>
                             </p>
@@ -449,39 +460,185 @@ function nds_staff_dashboard_improved() {
         </div>
     </div>
 
+    <!-- Stat Card Modal (Matching Student Management Style) -->
+    <div id="statModal" class="hidden" style="position:fixed; inset:0; z-index:999999; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5);" onclick="closeStatModal()"></div>
+        <div style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:1rem;">
+            <div style="background:#fff; border-radius:1rem; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); width:100%; max-width:42rem; max-height:80vh; display:flex; flex-direction:column; position:relative;">
+                <!-- Modal Header -->
+                <div id="statModalHeader" style="display:flex; align-items:center; justify-content:space-between; padding:1rem 1.5rem; border-bottom:1px solid #e5e7eb; border-radius:1rem 1rem 0 0;">
+                    <div style="display:flex; align-items:center; gap:0.75rem;">
+                        <div id="modalIconBg" style="width:2.5rem; height:2.5rem; border-radius:0.5rem; display:flex; align-items:center; justify-content:center;">
+                            <i id="modalIcon" style="font-size:1.25rem;"></i>
+                        </div>
+                        <div>
+                            <h3 id="statModalTitle" style="font-size:1.125rem; font-weight:700; color:#111827; margin:0;"></h3>
+                            <p id="statModalCount" style="font-size:0.875rem; color:#6b7280; margin:0;"></p>
+                        </div>
+                    </div>
+                    <button onclick="closeStatModal()" style="color:#9ca3af; padding:0.5rem; border-radius:0.5rem; border:none; background:none; cursor:pointer;" onmouseover="this.style.color='#4b5563'; this.style.background='#f3f4f6'" onmouseout="this.style.color='#9ca3af'; this.style.background='none'">
+                        <i class="fas fa-times" style="font-size:1.25rem;"></i>
+                    </button>
+                </div>
+                <!-- Modal Body (Scrollable) -->
+                <div style="overflow-y:auto; flex:1; padding:0.5rem;">
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead style="background:#f9fafb; position:sticky; top:0; z-index:10;">
+                            <tr>
+                                <th id="col1Header" style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; font-weight:500; color:#6b7280; text-transform:uppercase;"></th>
+                                <th id="col2Header" style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; font-weight:500; color:#6b7280; text-transform:uppercase;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="statModalBody">
+                            <!-- Dynamic Content -->
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Modal Footer -->
+                <div style="padding:0.75rem 1.5rem; border-top:1px solid #e5e7eb; background:#f9fafb; border-radius:0 0 1rem 1rem; text-align:right;">
+                    <button onclick="closeStatModal()" style="padding:0.5rem 1rem; font-size:0.875rem; font-weight:500; color:#374151; background:#fff; border:1px solid #d1d5db; border-radius:0.5rem; cursor:pointer;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#fff'">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Modal functionality
-        const modal = document.getElementById('addStaffModal');
+        // Modal functionality for Add Staff
+        const addStaffModal = document.getElementById('addStaffModal');
         const openBtn = document.getElementById('addStaffBtn');
         const firstStaffBtn = document.getElementById('addFirstStaffBtn');
         const closeBtn = document.getElementById('closeAddStaffModal');
         const cancelBtn = document.getElementById('cancelAddStaff');
 
-        [openBtn, firstStaffBtn].forEach(btn => {
-            if (btn) {
-                btn.addEventListener('click', () => {
-                    modal.classList.remove('hidden');
-                    modal.classList.add('flex');
-                });
-            }
-        });
+        if (openBtn) openBtn.addEventListener('click', () => { addStaffModal.classList.remove('hidden'); addStaffModal.classList.add('flex'); });
+        if (firstStaffBtn) firstStaffBtn.addEventListener('click', () => { addStaffModal.classList.remove('hidden'); addStaffModal.classList.add('flex'); });
+        if (closeBtn) closeBtn.addEventListener('click', () => { addStaffModal.classList.add('hidden'); addStaffModal.classList.remove('flex'); });
+        if (cancelBtn) cancelBtn.addEventListener('click', () => { addStaffModal.classList.add('hidden'); addStaffModal.classList.remove('flex'); });
 
-        [closeBtn, cancelBtn].forEach(btn => {
-            if (btn) {
-                btn.addEventListener('click', () => {
-                    modal.classList.add('hidden');
-                    modal.classList.remove('flex');
-                });
-            }
-        });
+        addStaffModal.addEventListener('click', (e) => { if (e.target === addStaffModal) { addStaffModal.classList.add('hidden'); addStaffModal.classList.remove('flex'); } });
 
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
+        // Stats Data for Modals
+        const statsData = {
+            total_staff: <?php echo json_encode($staff); ?>,
+            lecturers: <?php echo json_encode($lecturers_list); ?>,
+            assignments: <?php echo json_encode($all_assignments); ?>,
+            admins: <?php echo json_encode($admins_list); ?>
+        };
+
+        const modalConfig = {
+            total_staff: {
+                title: 'Total Staff Members',
+                col1: 'Staff Name',
+                col2: 'Role / Email',
+                icon: 'fas fa-users',
+                iconColor: '#2563eb',
+                iconBg: '#eff6ff'
+            },
+            lecturers: {
+                title: 'Lecturers',
+                col1: 'Lecturer Name',
+                col2: 'Email',
+                icon: 'fas fa-chalkboard-teacher',
+                iconColor: '#059669',
+                iconBg: '#ecfdf5'
+            },
+            assignments: {
+                title: 'Course Assignments',
+                col1: 'Lecturer',
+                col2: 'Course Assigned',
+                icon: 'fas fa-link',
+                iconColor: '#7c3aed',
+                iconBg: '#f5f3ff'
+            },
+            admins: {
+                title: 'Administrators & Support',
+                col1: 'Staff Name',
+                col2: 'Role / Email',
+                icon: 'fas fa-user-cog',
+                iconColor: '#ea580c',
+                iconBg: '#fff7ed'
+            }
+        };
+
+        window.openStatModal = function(type) {
+            const modal = document.getElementById('statModal');
+            const config = modalConfig[type];
+            const data = statsData[type];
+            
+            if (!modal || !config || !data) return;
+
+            // Set Text & Icons
+            document.getElementById('statModalTitle').textContent = config.title;
+            document.getElementById('statModalCount').textContent = data.length + ' item' + (data.length !== 1 ? 's' : '');
+            document.getElementById('col1Header').textContent = config.col1;
+            document.getElementById('col2Header').textContent = config.col2;
+            
+            const modalIcon = document.getElementById('modalIcon');
+            const modalIconBg = document.getElementById('modalIconBg');
+            
+            modalIcon.className = config.icon;
+            modalIcon.style.color = config.iconColor;
+            modalIconBg.style.backgroundColor = config.iconBg;
+
+            // Populate Table
+            const tbody = document.getElementById('statModalBody');
+            tbody.innerHTML = '';
+            
+            if (data && data.length > 0) {
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.style.cssText = 'border-bottom:1px solid #f3f4f6; transition: background 0.15s;';
+                    row.onmouseover = function() { this.style.background = '#f9fafb'; };
+                    row.onmouseout = function() { this.style.background = ''; };
+                    
+                    let col1 = '';
+                    let col2 = '';
+                    let iconClass = 'fas fa-user';
+                    let iconColor = '#3b82f6';
+
+                    if (type === 'assignments') {
+                        col1 = (item.first_name || '') + ' ' + (item.last_name || '');
+                        col2 = item.course_name || '—';
+                        iconClass = 'fas fa-link';
+                        iconColor = '#8b5cf6';
+                    } else {
+                        col1 = (item.first_name || '') + ' ' + (item.last_name || '');
+                        col2 = (item.role || 'Staff') + ' • ' + (item.email || '');
+                        iconClass = item.role === 'Lecturer' ? 'fas fa-chalkboard-teacher' : 'fas fa-user-cog';
+                        iconColor = item.role === 'Lecturer' ? '#10b981' : '#f59e0b';
+                    }
+
+                    row.innerHTML = `
+                        <td style="padding:0.75rem 1rem;">
+                            <div style="display:flex; align-items:center;">
+                                <div style="width:2rem; height:2rem; background:#f0fdf4; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-right:0.75rem;">
+                                    <i class="${iconClass}" style="color:${iconColor}; font-size:0.75rem;"></i>
+                                </div>
+                                <div style="font-size:0.875rem; font-weight:600; color:#111827;">${col1}</div>
+                            </div>
+                        </td>
+                        <td style="padding:0.75rem 1rem; font-size:0.875rem; color:#6b7280; font-weight:400;">${col2}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } else {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td colspan="2" style="padding:2rem 1rem; text-align:center; color:#9ca3af; font-style:italic;">No items found</td>`;
+                tbody.appendChild(row);
+            }
+
+            modal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        };
+
+        window.closeStatModal = function() {
+            const modal = document.getElementById('statModal');
+            if (modal) {
                 modal.classList.add('hidden');
-                modal.classList.remove('flex');
+                document.body.style.overflow = '';
             }
-        });
+        };
 
         // Auto-generate email
         const firstNameInput = document.querySelector('input[name="first_name"]');

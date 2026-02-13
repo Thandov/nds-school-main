@@ -15,8 +15,15 @@ if (!defined('ABSPATH')) {
     exit; // Prevent direct access
 }
 
+// Define plugin directory constant
+if (!defined('NDS_SCHOOL_PLUGIN_DIR')) {
+    define('NDS_SCHOOL_PLUGIN_DIR', plugin_dir_path(__FILE__));
+}
+
 // Include calendar functions for AJAX handlers
-require_once plugin_dir_path(__FILE__) . 'includes/calendar-functions.php';
+require_once NDS_SCHOOL_PLUGIN_DIR . 'includes/calendar-functions.php';
+require_once NDS_SCHOOL_PLUGIN_DIR . 'includes/notification-functions.php';
+require_once NDS_SCHOOL_PLUGIN_DIR . 'includes/program-functions.php';
 
 /**
  * Restrict WordPress admin area for subscribers when this plugin is active.
@@ -197,6 +204,18 @@ add_action('init', function () {
     $application_forms_table = $wpdb->prefix . 'nds_application_forms';
     $application_forms_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $application_forms_table));
     if (empty($application_forms_exists)) {
+        $needs_migration = true;
+    }
+
+    $activity_log_table = $wpdb->prefix . 'nds_student_activity_log';
+    $activity_log_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $activity_log_table));
+    if (empty($activity_log_exists)) {
+        $needs_migration = true;
+    }
+
+    $notifications_table = $wpdb->prefix . 'nds_notifications';
+    $notifications_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $notifications_table));
+    if (empty($notifications_exists)) {
         $needs_migration = true;
     }
 
@@ -418,14 +437,14 @@ function nds_portal_get_latest_application_for_current_user() {
     return $row ?: null;
 }
 
-// One-off: add FK students.faculty_id -> education_paths.id
+// One-off: add FK students.faculty_id -> faculties.id
 function nds_add_faculty_fk_action() {
     if (!current_user_can('manage_options')) {
         wp_die('Unauthorized');
     }
     global $wpdb;
     $students = $wpdb->prefix . 'nds_students';
-    $paths = $wpdb->prefix . 'nds_education_paths';
+    $paths = $wpdb->prefix . 'nds_faculties';
     // Attempt to add FK; ignore errors if it already exists
     $wpdb->query("ALTER TABLE {$students} ADD CONSTRAINT fk_students_faculty FOREIGN KEY (faculty_id) REFERENCES {$paths}(id) ON DELETE SET NULL");
     $notice = $wpdb->last_error ? 'error=' . rawurlencode($wpdb->last_error) : 'success=faculty_fk_added';
@@ -435,6 +454,41 @@ function nds_add_faculty_fk_action() {
 add_action('admin_post_nds_add_faculty_fk', 'nds_add_faculty_fk_action');
 
 // AJAX handler for getting courses by faculty
+function nds_get_programs_by_faculty() {
+    // Verify nonce
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'nds_get_courses_nonce')) {
+        wp_send_json_error('Security check failed');
+    }
+
+    $faculty_id = isset($_POST['faculty_id']) ? intval($_POST['faculty_id']) : 0;
+    if ($faculty_id <= 0) {
+        wp_send_json_error('Invalid faculty ID');
+    }
+
+    global $wpdb;
+
+    // Fetch all programs for a given faculty
+    $programs = $wpdb->get_results(
+        $wpdb->prepare(
+            "
+            SELECT id, name
+            FROM {$wpdb->prefix}nds_programs
+            WHERE faculty_id = %d
+            AND status = 'active'
+            ORDER BY name ASC
+            ",
+            $faculty_id
+        )
+    );
+
+    if ($programs === null) {
+        wp_send_json_error('Failed to load programs: ' . $wpdb->last_error);
+    }
+
+    wp_send_json_success($programs);
+}
+add_action('wp_ajax_nds_get_programs_by_faculty', 'nds_get_programs_by_faculty');
+
 function nds_get_courses_by_faculty() {
     // Verify nonce
     if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'nds_get_courses_nonce')) {
@@ -1135,11 +1189,15 @@ add_action('template_redirect', function () {
 
     $student_id = (int) nds_portal_get_current_student_id();
     if ($student_id <= 0) {
-        // No learner profile yet for this WP account – send them to the online application form
-        // instead of showing a hard error. This lets first-time applicants continue their journey.
-        $application_url = home_url('/online-application/');
-        wp_safe_redirect($application_url);
-        exit;
+        // Allow admins to view the portal template (which handles missing student ID gracefully)
+        if (current_user_can('manage_options')) {
+            // Do nothing, let it fall through to include the template
+        } else {
+            // No learner profile for regular user – send them to the online application form
+            $application_url = home_url('/online-application/');
+            wp_safe_redirect($application_url);
+            exit;
+        }
     }
 
     // Render a standalone full-screen learner dashboard (no theme header/nav)
@@ -1203,6 +1261,18 @@ add_action('wp_enqueue_scripts', function () {
             plugin_dir_url(__FILE__) . 'assets/css/styles.css',
             array('nds-learner-portal-frontend'),
             filemtime($styles_css),
+            'all'
+        );
+    }
+
+    // Student Portal Layout CSS (overrides theme headers/footers)
+    $layout_css = plugin_dir_path(__FILE__) . 'assets/css/student-portal-layout.css';
+    if (file_exists($layout_css)) {
+        wp_enqueue_style(
+            'nds-student-portal-layout',
+            plugin_dir_url(__FILE__) . 'assets/css/student-portal-layout.css',
+            array('nds-learner-portal-frontend', 'nds-learner-portal-styles'),
+            filemtime($layout_css),
             'all'
         );
     }
@@ -1426,6 +1496,8 @@ function nds_register_applicant_user() {
         wp_send_json_error('An account with this email already exists. Please log in instead.');
     }
 
+    error_log("NDS Registration Attempt: Email=$email, FirstName=$first_name, LastName=$last_name");
+
     $username = sanitize_user($email, true);
     if (username_exists($username)) {
         // Fallback: append random suffix
@@ -1434,6 +1506,7 @@ function nds_register_applicant_user() {
 
     $user_id = wp_create_user($username, $password, $email);
     if (is_wp_error($user_id)) {
+        error_log('NDS Registration Error: ' . $user_id->get_error_message());
         wp_send_json_error($user_id->get_error_message());
     }
 
@@ -1448,6 +1521,7 @@ function nds_register_applicant_user() {
     wp_set_current_user($user_id);
     wp_set_auth_cookie($user_id, true);
 
+    error_log('NDS Registration Success: User ID ' . $user_id);
     wp_send_json_success(array(
         'user_id' => $user_id,
     ));

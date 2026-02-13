@@ -95,7 +95,7 @@ function nds_students_mosaic_grid_page() {
 
     ?>
     <div class="wrap">
-        <div class="nds-tailwind-wrapper bg-gray-50 min-h-screen p-8" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <div class="nds-tailwind-wrapper bg-gray-50 pb-12 p-8" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin-left: -20px; padding-left: 20px; margin-top: -20px;">
 
             <!-- Breadcrumb Navigation -->
             <div class="max-w-7xl mx-auto mb-6">

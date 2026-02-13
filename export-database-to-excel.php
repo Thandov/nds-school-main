@@ -41,17 +41,21 @@ $tables_config = [
         'dropdown_source' => true
     ],
 
-    // Faculty/Program hierarchy
+    // Program/Faculty hierarchy (Programs are top level, Faculties sit under Programs)
     'faculties' => [
-        'title' => 'Faculties',
+        // Note: These rows represent top-level Programs in the academic model
+        'title' => 'Programs',
         'columns' => ['id', 'code', 'name', 'short_name', 'description', 'dean_name', 'contact_email', 'status'],
         'dropdown_source' => true
     ],
     'programs' => [
-        'title' => 'Programs',
+        // Note: These rows represent Faculties (under a Program) in the academic model
+        'title' => 'Faculties',
         'columns' => ['id', 'faculty_id', 'program_type_id', 'code', 'name', 'short_name', 'nqf_level', 'total_credits', 'duration_years', 'accreditation_body_id', 'status'],
         'dropdowns' => [
-            'faculty_id' => 'Faculties!$B:$B', // Name column for dropdown display
+            // In Excel, we point to the Programs sheet for the program name/code,
+            // even though the physical FK column is still faculty_id.
+            'faculty_id' => 'Programs!$B:$B', // Program name column for dropdown display
             'program_type_id' => 'Program Types!$B:$B',
             'accreditation_body_id' => 'Accreditation Bodies!$B:$B'
         ]
@@ -60,16 +64,16 @@ $tables_config = [
         'title' => 'Program Levels',
         'columns' => ['id', 'program_id', 'level_number', 'name', 'description', 'required_credits'],
         'dropdowns' => [
-            'program_id' => 'Programs!$D:$E' // Code, Name columns
+            'program_id' => 'Faculties!$D:$E' // Code, Name (faculty = nds_programs row)
         ]
     ],
 
-    // Courses and related
+    // Courses and related (program_id = nds_programs = Faculties sheet)
     'courses' => [
         'title' => 'Courses',
         'columns' => ['id', 'program_id', 'level_id', 'code', 'name', 'nqf_level', 'credits', 'contact_hours', 'category_id', 'is_required', 'status'],
         'dropdowns' => [
-            'program_id' => 'Programs!$D:$E', // Code, Name columns
+            'program_id' => 'Faculties!$D:$E', // Code, Name columns
             'level_id' => 'Program Levels!$C:$C', // Name column
             'category_id' => 'Course Categories!$B:$B' // Name column
         ]
@@ -88,7 +92,7 @@ $tables_config = [
         'title' => 'Program Accreditations',
         'columns' => ['id', 'program_id', 'accreditation_body_id', 'accreditation_number', 'accreditation_date', 'expiry_date', 'status'],
         'dropdowns' => [
-            'program_id' => 'Programs!$D:$E', // Code, Name columns
+            'program_id' => 'Faculties!$D:$E', // Code, Name (program_id = nds_programs)
             'accreditation_body_id' => 'Accreditation Bodies!$B:$B' // Name column
         ]
     ],
@@ -136,7 +140,7 @@ $tables_config = [
         'title' => 'Students',
         'columns' => ['id', 'student_number', 'wp_user_id', 'faculty_id', 'first_name', 'last_name', 'email', 'phone', 'status'],
         'dropdowns' => [
-            'faculty_id' => 'Faculties!$B:$B' // name column
+            'faculty_id' => 'Programs!$B:$B' // Programs sheet (nds_faculties) = top-level program
         ]
     ]
 ];
@@ -174,6 +178,7 @@ function generate_excel_file($tables_config, $export_dir, $excel_file, $silent =
 
     $csv_files = [];
     $setup_instructions = [];
+    $sheets_for_xlsx = [];
 
     foreach ($tables_config as $table_key => $config) {
         $table_name = $wpdb->prefix . 'nds_' . $table_key;
@@ -212,6 +217,35 @@ function generate_excel_file($tables_config, $export_dir, $excel_file, $silent =
 
         if (isset($config['dropdowns'])) {
             $setup_instructions[$config['title']] = $config['dropdowns'];
+        }
+
+        // Collect data for single XLSX workbook
+        $sheet_rows = $results;
+        if (empty($sheet_rows)) {
+            $sheet_rows = [ array_combine($config['columns'], $config['columns']) ];
+        }
+        $sheets_for_xlsx[] = [ 'name' => $config['title'], 'rows' => $sheet_rows ];
+    }
+
+    // Generate real .xlsx with all sheets
+    if (!empty($sheets_for_xlsx)) {
+        $writer_path = dirname(__FILE__) . '/includes/class-nds-xlsx-writer.php';
+        if (file_exists($writer_path)) {
+            require_once $writer_path;
+            try {
+                $writer = new NDS_XLSX_Writer($excel_file);
+                foreach ($sheets_for_xlsx as $sheet) {
+                    $writer->addSheet($sheet['name'], $sheet['rows']);
+                }
+                $writer->close();
+                if (!$silent) {
+                    echo "✓ Created Excel workbook: " . basename($excel_file) . "\n";
+                }
+            } catch (Exception $e) {
+                if (!$silent) {
+                    echo "✗ XLSX write failed: " . $e->getMessage() . "\n";
+                }
+            }
         }
     }
 
@@ -368,8 +402,9 @@ if (php_sapi_name() === 'cli') {
     echo "\n=== Export Summary ===\n";
     echo "Export directory: $export_dir\n";
     echo "Files created:\n";
+    echo "- nds-school-database.xlsx (multi-sheet Excel workbook)\n";
     echo "- CSV files for each table\n";
-    echo "- EXCEL_SETUP_GUIDE.txt (step-by-step instructions)\n";
-    echo "- import-to-excel.vbs (automated import script)\n";
+    echo "- EXCEL_SETUP_GUIDE.txt (step-by-step instructions for dropdowns)\n";
+    echo "- import-to-excel.vbs (optional: automated CSV import)\n";
 }
 ?>

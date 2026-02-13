@@ -34,19 +34,21 @@ if (!function_exists('nds_import_excel_run')) {
  * IDs are always created by the DB on insert; Excel "id" column is ignored.
  *
  * Import order (so FKs are always the current auto_increment ids):
- *   1. Faculties → 2. Programs (under faculty) → 3. Courses (under program) → ...
- * Therefore program_id in nds_courses must be the actual nds_programs.id (resolved by program name/code only, never Excel program_id).
+ *   1. Programs (top level) → 2. Faculties (under program) → 3. Courses (under faculty) → ...
+ * Internally the physical tables remain nds_faculties (storing Programs) and nds_programs (storing Faculties),
+ * but Excel uses real-world naming so sheets are ordered Program → Faculty → Course.
  *
- * Flow: Lookups → Faculties → Programs (linked to faculty) → Program_Levels → Staff, Rooms
- *       → Courses (linked to programs) → Course_Schedules (linked to courses) → Course_Accreditations, Students.
+ * Flow: Lookups → Programs (stored in nds_faculties) → Faculties (stored in nds_programs, linked to program)
+ *       → Program_Levels → Staff, Rooms → Courses (linked to faculties) → Course_Schedules, Course_Accreditations, Students.
  */
 function nds_import_excel_get_sheet_order() {
     return [
         'Accreditation_Bodies' => 'accreditation_bodies',
         'Program_Types'        => 'program_types',
         'Course_Categories'    => 'course_categories',
-        'Faculties'            => 'faculties',
-        'Programs'             => 'programs',
+        // Excel "Programs" sheet = nds_faculties (top-level); "Faculties" sheet = nds_programs (under program)
+        'Programs'             => 'faculties',
+        'Faculties'             => 'programs',
         'Program_Levels'       => 'program_levels',
         'Staff'                => 'staff',
         'wp_nds_rooms'         => 'rooms',

@@ -41,12 +41,19 @@ function nds_handle_student_data($request_type = 'POST') {
     $guardian_phone = isset($request_data['guardian_phone']) ? trim(sanitize_text_field($request_data['guardian_phone'])) : '';
     $guardian_email = isset($request_data['guardian_email']) ? trim(sanitize_email($request_data['guardian_email'])) : '';
 
-    // Normalize faculty_id: treat empty string or '0' as NULL to avoid FK violations
+    // Normalize IDs: treat empty string or '0' as NULL to avoid FK violations
     $faculty_id_raw = isset($request_data['faculty_id']) ? trim((string)$request_data['faculty_id']) : '';
     $faculty_id = ($faculty_id_raw === '' || $faculty_id_raw === '0') ? null : intval($faculty_id_raw);
 
+    $program_id_raw = isset($request_data['program_id']) ? trim((string)$request_data['program_id']) : '';
+    $program_id = ($program_id_raw === '' || $program_id_raw === '0') ? null : intval($program_id_raw);
+
+    $course_id_raw = isset($request_data['course_id']) ? trim((string)$request_data['course_id']) : '';
+    $course_id = ($course_id_raw === '' || $course_id_raw === '0') ? null : intval($course_id_raw);
+
     return [
         'faculty_id' => $faculty_id,
+        'program_id' => $program_id,
         'first_name' => isset($request_data['first_name']) ? sanitize_text_field($request_data['first_name']) : '',
         'last_name' => isset($request_data['last_name']) ? sanitize_text_field($request_data['last_name']) : '',
         'email' => isset($request_data['email']) ? sanitize_email($request_data['email']) : '',
@@ -135,10 +142,20 @@ function nds_add_student() {
         exit;
     }
 }
+add_action('admin_post_nds_add_student', 'nds_add_student');
 
 // Update student
-function nds_update_student($student_id) {
+function nds_update_student($student_id = null) {
     global $wpdb;
+    
+    // Get student_id from POST if not provided (for admin-post calls)
+    if ($student_id === null && isset($_POST['student_id'])) {
+        $student_id = intval($_POST['student_id']);
+    }
+    
+    if (!$student_id) {
+        wp_die('Invalid student ID');
+    }
     
     if (!isset($_POST['nds_update_student_nonce']) || !wp_verify_nonce($_POST['nds_update_student_nonce'], 'nds_update_student_nonce_action')) {
         wp_die('Security check failed.');
@@ -175,6 +192,7 @@ function nds_update_student($student_id) {
         exit;
     }
 }
+add_action('admin_post_nds_update_student', 'nds_update_student');
 
 // Get student by ID
 function nds_get_student($student_id) {

@@ -115,6 +115,17 @@ function nds_add_schedule() {
         exit;
     }
 
+    // Notify students of new schedule
+    if (function_exists('nds_notify_enrolled_students')) {
+        $course_name = $wpdb->get_var($wpdb->prepare("SELECT name FROM {$wpdb->prefix}nds_courses WHERE id = %d", $data['course_id']));
+        nds_notify_enrolled_students(
+            $data['course_id'],
+            'New Schedule Added',
+            'A new session has been added for ' . ($course_name ?: 'your course') . '. Please check the timetable.',
+            'timetable'
+        );
+    }
+
     // Redirect with success message
     wp_redirect(add_query_arg('success', 'schedule_created', wp_get_referer()));
     exit;

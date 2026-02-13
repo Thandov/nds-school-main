@@ -28,174 +28,82 @@ get_header();
 // Fetch data from database
 global $wpdb;
 
-// Base tables
-$table_courses = $wpdb->prefix . 'nds_courses';
+// Table names
+$table_faculties = $wpdb->prefix . 'nds_faculties';
+$table_programs  = $wpdb->prefix . 'nds_programs';
+$table_courses   = $wpdb->prefix . 'nds_courses';
 
-// Potential faculties tables
-$table_faculties_new = $wpdb->prefix . 'nds_faculties';
-$table_faculties_old = $wpdb->prefix . 'nds_education_paths';
+// Fetch Faculties
+$faculties = $wpdb->get_results("
+    SELECT id, name
+    FROM {$table_faculties}
+    ORDER BY name ASC
+", ARRAY_A);
 
-// Potential programmes tables
-$table_programs_new = $wpdb->prefix . 'nds_programs';
-$table_programs_old = $wpdb->prefix . 'nds_program_types';
-
-// Detect which tables actually have data
-$courses_table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_courses'") == $table_courses;
-
-$fac_new_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_faculties_new'") == $table_faculties_new;
-$fac_old_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_faculties_old'") == $table_faculties_old;
-
-$prog_new_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_programs_new'") == $table_programs_new;
-$prog_old_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_programs_old'") == $table_programs_old;
-
-$fac_new_count = ($fac_new_exists) ? (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table_faculties_new}") : 0;
-$fac_old_count = ($fac_old_exists) ? (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table_faculties_old}") : 0;
-
-$prog_new_count = ($prog_new_exists) ? (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table_programs_new}") : 0;
-$prog_old_count = ($prog_old_exists) ? (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table_programs_old}") : 0;
-
-// Choose faculties table: prefer one that exists and has rows
-if ($fac_new_count > 0) {
-    $table_faculties = $table_faculties_new;
-} elseif ($fac_old_count > 0) {
-    $table_faculties = $table_faculties_old;
-} else {
-    $table_faculties = $table_faculties_new; // default, even if empty
-}
-
-// Choose programmes table: prefer one that exists and has rows
-if ($prog_new_count > 0) {
-    $table_programs = $table_programs_new;
-    $programs_schema = 'new'; // uses faculty_id
-} elseif ($prog_old_count > 0) {
-    $table_programs = $table_programs_old;
-    $programs_schema = 'old'; // uses path_id
-} else {
-    $table_programs = $table_programs_new; // default, even if empty
-    $programs_schema = 'new';
-}
-
-$faculties_table_exists = ($fac_new_exists || $fac_old_exists);
-$programs_table_exists  = ($prog_new_exists || $prog_old_exists);
-
-$courses   = array();
-$programs  = array();
-$faculties = array();
-
-// Faculties
-if ($faculties_table_exists) {
-    $faculties = $wpdb->get_results("
-        SELECT id, name
-        FROM {$table_faculties}
-        ORDER BY name ASC
-    ", ARRAY_A);
-}
-
-// Programmes - adapt to chosen schema
-if ($programs_table_exists) {
-    if ($programs_schema === 'old') {
-        // OLD structure: program_types uses path_id to link to education_paths
-        $programs = $wpdb->get_results("
-            SELECT id, name, path_id AS faculty_id, level
-            FROM {$table_programs}
-            ORDER BY name ASC
-        ", ARRAY_A);
-    } else {
-        // NEW structure: programs table with faculty_id
-        $programs = $wpdb->get_results("
-            SELECT id, name, faculty_id, nqf_level AS level
-            FROM {$table_programs}
-            ORDER BY name ASC
-        ", ARRAY_A);
-    }
-}
+// Fetch Programs
+$programs = $wpdb->get_results("
+    SELECT id, name, faculty_id, nqf_level AS level
+    FROM {$table_programs}
+    ORDER BY name ASC
+", ARRAY_A);
 
 // Courses / modules
-if ($courses_table_exists) {
-    // #region agent log: courses query debug
-    // First, check what status values actually exist in the database
-    $status_samples = $wpdb->get_results("
-        SELECT DISTINCT status, COUNT(*) as count
-        FROM {$table_courses}
-        GROUP BY status
-        LIMIT 10
-    ", ARRAY_A);
-    $total_courses = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table_courses}");
-    
-    @file_put_contents(
-        __DIR__ . '/../.cursor/debug.log',
-        json_encode(array(
-            'sessionId' => 'debug-session',
-            'runId' => 'pre-fix-courses',
-            'hypothesisId' => 'H_courses_query',
-            'location' => 'applicationForm.php:courses_debug',
-            'message' => 'Courses table status values check',
-            'data' => array(
-                'table_exists' => $courses_table_exists,
-                'total_courses' => $total_courses,
-                'status_samples' => $status_samples,
-            ),
-            'timestamp' => round(microtime(true) * 1000),
-        )) . PHP_EOL,
-        FILE_APPEND
-    );
-    // #endregion
-    
-    // Get all active courses with their programme information
-    // NOTE: Handle both 'active' (new schema) and 'Active' (old migration schema) for case-insensitive matching
-    $courses = $wpdb->get_results("
-        SELECT c.id, c.name, c.nqf_level, c.program_id
-        FROM {$table_courses} c
-        WHERE LOWER(c.status) = 'active'
-        ORDER BY c.name ASC
-    ", ARRAY_A);
-    
-    // #region agent log: courses query result
-    @file_put_contents(
-        __DIR__ . '/../.cursor/debug.log',
-        json_encode(array(
-            'sessionId' => 'debug-session',
-            'runId' => 'pre-fix-courses',
-            'hypothesisId' => 'H_courses_query',
-            'location' => 'applicationForm.php:courses_result',
-            'message' => 'Courses query result',
-            'data' => array(
-                'courses_found' => count($courses),
-                'first_3_course_ids' => array_slice(array_column($courses, 'id'), 0, 3),
-            ),
-            'timestamp' => round(microtime(true) * 1000),
-        )) . PHP_EOL,
-        FILE_APPEND
-    );
-    // #endregion
-}
+$total_courses = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table_courses}");
+
+// Get all active courses with their programme information
+// NOTE: Handle both 'active' (new schema) and 'Active' (old migration schema) for case-insensitive matching
+$courses = $wpdb->get_results("
+    SELECT c.id, c.name, c.nqf_level, c.program_id
+    FROM {$table_courses} c
+    WHERE LOWER(c.status) = 'active'
+    ORDER BY c.name ASC
+", ARRAY_A);
+
+// #region agent log: courses query result
+@file_put_contents(
+    __DIR__ . '/../.cursor/debug.log',
+    json_encode(array(
+        'sessionId' => 'debug-session',
+        'runId' => 'pre-fix-courses',
+        'hypothesisId' => 'H_courses_query',
+        'location' => 'applicationForm.php:courses_result',
+        'message' => 'Courses query result',
+        'data' => array(
+            'courses_found' => count($courses),
+            'first_3_course_ids' => array_slice(array_column($courses, 'id'), 0, 3),
+        ),
+        'timestamp' => round(microtime(true) * 1000),
+    )) . PHP_EOL,
+    FILE_APPEND
+);
+// #endregion
 
 // If no courses found, keep arrays empty so the notice shows
 if (empty($courses)) {
     $courses = array();
 }
 
-// Build a single hierarchical catalogue: Faculty -> Programmes -> Courses
+// Build a hierarchical catalogue: Program (wp_nds_faculties) -> Faculty (wp_nds_programs) -> Qualification (wp_nds_courses)
 $catalogue = array();
 
-// Index faculties
+// Index Programs (from faculties table)
 foreach ($faculties as $faculty) {
     $fid = (int) $faculty['id'];
     $catalogue[$fid] = array(
         'id'        => $fid,
         'name'      => $faculty['name'],
-        'programmes'=> array(),
+        'faculties' => array(), // Swapped label: was 'programmes'
     );
 }
 
-// Attach programmes to faculties
+// Attach Faculties (from programs table) to Programs (from faculties table)
 foreach ($programs as $program) {
     $pid        = (int) $program['id'];
     $faculty_id = isset($program['faculty_id']) ? (int) $program['faculty_id'] : 0;
     if (!$faculty_id || !isset($catalogue[$faculty_id])) {
         continue;
     }
-    $catalogue[$faculty_id]['programmes'][$pid] = array(
+    $catalogue[$faculty_id]['faculties'][$pid] = array(
         'id'      => $pid,
         'name'    => $program['name'],
         'level'   => isset($program['level']) ? $program['level'] : '',
@@ -203,7 +111,7 @@ foreach ($programs as $program) {
     );
 }
 
-// Attach courses to programmes within faculties
+// Attach Qualifications (from courses table) to Faculties (from programs table)
 foreach ($courses as $course) {
     $cid        = (int) $course['id'];
     $program_id = isset($course['program_id']) ? (int) $course['program_id'] : 0;
@@ -211,9 +119,9 @@ foreach ($courses as $course) {
         continue;
     }
 
-    foreach ($catalogue as $fid => &$faculty) {
-        if (isset($faculty['programmes'][$program_id])) {
-            $faculty['programmes'][$program_id]['courses'][$cid] = array(
+    foreach ($catalogue as $fid => &$program_item) {
+        if (isset($program_item['faculties'][$program_id])) {
+            $program_item['faculties'][$program_id]['courses'][$cid] = array(
                 'id'        => $cid,
                 'name'      => $course['name'],
                 'nqf_level' => isset($course['nqf_level']) ? $course['nqf_level'] : '',
@@ -221,7 +129,7 @@ foreach ($courses as $course) {
             break;
         }
     }
-    unset($faculty);
+    unset($program_item);
 }
 
 // #region agent log: catalogue summary
@@ -650,40 +558,42 @@ label input[type=radio] {
         <div class="nds-step-title">Choose programme</div>
         <div class="nds-step-muted">Select the faculty, programme and course you’re applying for.</div>
       </div>
+        <div class="nds-step-title">Choose program</div>
+        <div class="nds-step-muted">Select the faculty, program and qualification you’re applying for.</div>
+      </div>
     </div>
 
-    <h4 style="background-color: #d5dce1; padding: 10px;"><strong>CHOOSE A PROGRAMME &amp; COURSE</strong></h4>
+  <h4 style="background-color: #d5dce1; padding: 10px;"><strong>3. PROGRAM AND QUALIFICATION SELECTION</strong></h4>
+  <p>Please select the Program, Faculty and the intended Qualification you wish to apply for.</p>
 
-    <?php if (empty($courses)): ?>
-      <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
-        <strong>Notice:</strong> No courses are currently available. Please contact the administrator or check back later.
-      </div>
-    <?php endif; ?>
+  <div class="nds-form-grid">
+    <div>
+      <label for="faculty_select">Program:</label> <!-- Label Swapped: mapped to $faculties table -->
+      <select name="faculty_id" id="faculty_select" required>
+        <option value="">--- Select Program ---</option>
+        <?php foreach ( $faculties as $faculty ) : ?>
+          <option value="<?php echo esc_attr( $faculty['id'] ); ?>"><?php echo esc_html( $faculty['name'] ); ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
 
-    <label>Faculty</label>
-    <select name="faculty_id" id="faculty_select" /*required*/>
-      <option value="">--- Select Faculty ---</option>
-      <?php 
-      if (!empty($faculties)) {
-        foreach ($faculties as $faculty) {
-          echo '<option value="' . esc_attr($faculty['id']) . '">' . esc_html($faculty['name']) . '</option>';
-        }
-      }
-      ?>
-    </select>
+    <div>
+      <label for="program_select">Faculty:</label> <!-- Label Swapped: mapped to $programs table -->
+      <select name="program_id" id="program_select" required>
+        <option value="">--- Select Faculty ---</option>
+      </select>
+    </div>
 
-    <label>Programme</label>
-    <select name="program_id" id="program_select" /*required*/>
-      <option value="">--- Select Programme ---</option>
-    </select>
-
-    <label>Course</label>
-    <select name="course_id" id="course_select" /*required*/>
-      <option value="">--- Select Course ---</option>
-    </select>
-    <input type="hidden" name="course_name" id="course_name_hidden">
-    <input type="hidden" name="level" id="course_level_hidden">
-
+    <div>
+      <label for="course_select">Qualification:</label> <!-- Mapped to $courses table -->
+      <select name="course_id" id="course_select" required>
+        <option value="">--- Select Qualification ---</option>
+      </select>
+      <!-- Helper hidden fields for processing -->
+      <input type="hidden" name="course_name" id="course_name_hidden">
+      <input type="hidden" name="level" id="course_level_hidden">
+    </div>
+  </div>
     <div class="nds-step-nav">
       <button type="button" class="nds-button-secondary" data-prev-step="2">Back</button>
       <button type="button" class="nds-button-primary" data-next-step="4">Next: Fees contact</button>
@@ -1400,44 +1310,44 @@ document.addEventListener('DOMContentLoaded', function() {
   const courseLevelHidden = document.getElementById('course_level_hidden');
 
   if (facultySelect && programSelect && courseSelect && courseNameHidden) {
-    // When faculty changes, populate programmes for that faculty from ndsCatalogue
+    // When program (faculty_select) changes, populate faculties (program_select)
     facultySelect.addEventListener('change', function () {
       const fid = this.value ? parseInt(this.value, 10) : 0;
 
-      // reset programme and course selects
+      // reset faculty and qualification selects
       programSelect.value = '';
       courseSelect.value = '';
       if (courseNameHidden) courseNameHidden.value = '';
 
-      // rebuild programme options
-      programSelect.innerHTML = '<option value="">--- Select Programme ---</option>';
+      // rebuild faculty options
+      programSelect.innerHTML = '<option value="">--- Select Faculty ---</option>';
 
       if (fid && ndsCatalogue && ndsCatalogue[fid]) {
-        const faculty = ndsCatalogue[fid];
-        if (faculty.programmes) {
-          const programmes = faculty.programmes;
-          const programmeCount = Object.keys(programmes).length;
-          console.log('Faculty ID:', fid, 'Programmes found:', programmeCount);
+        const item = ndsCatalogue[fid];
+        if (item.faculties) {
+          const facultiesList = item.faculties;
+          const facultyCount = Object.keys(facultiesList).length;
+          console.log('Program ID:', fid, 'Faculties found:', facultyCount);
           
-          Object.keys(programmes).forEach(function (pid) {
-            const prog = programmes[pid];
+          Object.keys(facultiesList).forEach(function (pid) {
+            const facultyObj = facultiesList[pid];
             const opt = document.createElement('option');
-            opt.value = prog.id;
-            opt.textContent = prog.name;
+            opt.value = facultyObj.id;
+            opt.textContent = facultyObj.name;
             programSelect.appendChild(opt);
           });
         } else {
-          console.warn('No programmes found for faculty ID:', fid);
+          console.warn('No faculties found for program ID:', fid);
         }
       } else {
-        console.warn('Faculty not found in catalogue:', fid);
+        console.warn('Program not found in catalogue:', fid);
       }
 
-      // clear courses
-      courseSelect.innerHTML = '<option value="">--- Select Course ---</option>';
+      // clear qualifications
+      courseSelect.innerHTML = '<option value="">--- Select Qualification ---</option>';
     });
 
-    // When programme changes, populate courses for that programme
+    // When faculty (program_select) changes, populate qualifications (course_select)
     programSelect.addEventListener('change', function () {
       const fid = facultySelect.value ? parseInt(facultySelect.value, 10) : 0;
       const pid = this.value ? parseInt(this.value, 10) : 0;
@@ -1445,12 +1355,12 @@ document.addEventListener('DOMContentLoaded', function() {
       courseSelect.value = '';
       if (courseNameHidden) courseNameHidden.value = '';
 
-      courseSelect.innerHTML = '<option value="">--- Select Course ---</option>';
+      courseSelect.innerHTML = '<option value="">--- Select Qualification ---</option>';
 
-      if (fid && pid && ndsCatalogue && ndsCatalogue[fid] && ndsCatalogue[fid].programmes && ndsCatalogue[fid].programmes[pid]) {
-        const courses = ndsCatalogue[fid].programmes[pid].courses || {};
+      if (fid && pid && ndsCatalogue && ndsCatalogue[fid] && ndsCatalogue[fid].faculties && ndsCatalogue[fid].faculties[pid]) {
+        const courses = ndsCatalogue[fid].faculties[pid].courses || {};
         const courseCount = Object.keys(courses).length;
-        console.log('Programme ID:', pid, 'Courses found:', courseCount);
+        console.log('Faculty ID:', pid, 'Qualifications found:', courseCount);
         
         Object.keys(courses).forEach(function (cid) {
           const course = courses[cid];
@@ -1460,7 +1370,7 @@ document.addEventListener('DOMContentLoaded', function() {
           courseSelect.appendChild(opt);
         });
       } else {
-        console.warn('Programme not found in catalogue. Faculty ID:', fid, 'Programme ID:', pid);
+        console.warn('Faculty not found in catalogue. Program ID:', fid, 'Faculty ID:', pid);
       }
     });
 

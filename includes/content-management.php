@@ -17,8 +17,10 @@ function nds_content_management_page() {
     $recipes_table = $wpdb->prefix . 'nds_recipes';
 
     // Get statistics
-    $total_recipes = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$recipes_table}");
-    $recent_recipes = $wpdb->get_results("SELECT * FROM {$recipes_table} ORDER BY created_at DESC LIMIT 6", ARRAY_A);
+    $all_recipes = $wpdb->get_results("SELECT * FROM {$recipes_table} ORDER BY created_at DESC", ARRAY_A);
+    $total_recipes = count($all_recipes);
+    $with_images_list = array_values(array_filter($all_recipes, function($r) { return !empty($r['image']); }));
+    $recent_recipes = array_slice($all_recipes, 0, 6);
 
     // Handle search
     $search = isset($_GET['search']) ? sanitize_text_field($_GET['search']) : '';
@@ -28,7 +30,7 @@ function nds_content_management_page() {
     $recipes = $wpdb->get_results("SELECT * FROM {$recipes_table} {$search_condition} ORDER BY created_at DESC", ARRAY_A);
 
     ?>
-    <div class="nds-tailwind-wrapper bg-gray-50 min-h-screen" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <div class="nds-tailwind-wrapper bg-gray-50 pb-12" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin-left: -20px; padding-left: 20px; margin-top: -20px;">
         <!-- Header -->
         <div class="bg-white shadow-sm border-b border-gray-200">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -68,10 +70,11 @@ function nds_content_management_page() {
 
             <!-- Stats Cards -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <!-- Total Recipes -->
+                <div onclick="openStatModal('total')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Total Recipes</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Total Recipes</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
                                 <?php echo number_format_i18n($total_recipes); ?>
                             </p>
@@ -85,10 +88,11 @@ function nds_content_management_page() {
                     </p>
                 </div>
 
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <!-- Published Recipes -->
+                <div onclick="openStatModal('total')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group text-left">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Published</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Published</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
                                 <?php echo number_format_i18n($total_recipes); ?>
                             </p>
@@ -102,15 +106,13 @@ function nds_content_management_page() {
                     </p>
                 </div>
 
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <!-- Recipes with Images -->
+                <div onclick="openStatModal('images')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">With Images</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">With Images</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
-                                <?php 
-                                $with_images = $wpdb->get_var("SELECT COUNT(*) FROM {$recipes_table} WHERE image IS NOT NULL AND image != ''");
-                                echo number_format_i18n($with_images);
-                                ?>
+                                <?php echo number_format_i18n(count($with_images_list)); ?>
                             </p>
                         </div>
                         <div class="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center">
@@ -332,5 +334,136 @@ function nds_content_management_page() {
         overflow: hidden;
     }
     </style>
+
+    <!-- Stat Card Modal (Matching Student Management Style) -->
+    <div id="statModal" class="hidden" style="position:fixed; inset:0; z-index:999999; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5);" onclick="closeStatModal()"></div>
+        <div style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:1rem;">
+            <div style="background:#fff; border-radius:1rem; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); width:100%; max-width:42rem; max-height:80vh; display:flex; flex-direction:column; position:relative;">
+                <!-- Modal Header -->
+                <div id="statModalHeader" style="display:flex; align-items:center; justify-content:space-between; padding:1rem 1.5rem; border-bottom:1px solid #e5e7eb; border-radius:1rem 1rem 0 0;">
+                    <div style="display:flex; align-items:center; gap:0.75rem;">
+                        <div id="modalIconBg" style="width:2.5rem; height:2.5rem; border-radius:0.5rem; display:flex; align-items:center; justify-content:center;">
+                            <i id="modalIcon" style="font-size:1.25rem;"></i>
+                        </div>
+                        <div>
+                            <h3 id="statModalTitle" style="font-size:1.125rem; font-weight:700; color:#111827; margin:0;"></h3>
+                            <p id="statModalCount" style="font-size:0.875rem; color:#6b7280; margin:0;"></p>
+                        </div>
+                    </div>
+                    <button onclick="closeStatModal()" style="color:#9ca3af; padding:0.5rem; border-radius:0.5rem; border:none; background:none; cursor:pointer;" onmouseover="this.style.color='#4b5563'; this.style.background='#f3f4f6'" onmouseout="this.style.color='#9ca3af'; this.style.background='none'">
+                        <i class="fas fa-times" style="font-size:1.25rem;"></i>
+                    </button>
+                </div>
+                <!-- Modal Body (Scrollable) -->
+                <div style="overflow-y:auto; flex:1; padding:0.5rem;">
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead style="background:#f9fafb; position:sticky; top:0; z-index:10;">
+                            <tr>
+                                <th id="col1Header" style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; font-weight:500; color:#6b7280; text-transform:uppercase;">Recipe Name</th>
+                                <th id="col2Header" style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; font-weight:500; color:#6b7280; text-transform:uppercase;">Created Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="statModalBody">
+                            <!-- Dynamic Content -->
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Modal Footer -->
+                <div style="padding:0.75rem 1.5rem; border-top:1px solid #e5e7eb; background:#f9fafb; border-radius:0 0 1rem 1rem; text-align:right;">
+                    <button onclick="closeStatModal()" style="padding:0.5rem 1rem; font-size:0.875rem; font-weight:500; color:#374151; background:#fff; border:1px solid #d1d5db; border-radius:0.5rem; cursor:pointer;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#fff'">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const statsData = {
+            total: <?php echo json_encode($all_recipes); ?>,
+            images: <?php echo json_encode($with_images_list); ?>
+        };
+
+        const modalConfig = {
+            total: {
+                title: 'All Recipes',
+                icon: 'fas fa-utensils',
+                iconColor: '#9333ea',
+                iconBg: '#f5f3ff'
+            },
+            images: {
+                title: 'Recipes with Images',
+                icon: 'fas fa-images',
+                iconColor: '#10b981',
+                iconBg: '#f0fdf4'
+            }
+        };
+
+        window.openStatModal = function(type) {
+            const modal = document.getElementById('statModal');
+            const config = modalConfig[type];
+            const data = statsData[type];
+            
+            if (!modal || !config || !data) return;
+
+            document.getElementById('statModalTitle').textContent = config.title;
+            document.getElementById('statModalCount').textContent = data.length + ' item' + (data.length !== 1 ? 's' : '');
+            
+            const modalIcon = document.getElementById('modalIcon');
+            const modalIconBg = document.getElementById('modalIconBg');
+            
+            modalIcon.className = config.icon;
+            modalIcon.style.color = config.iconColor;
+            modalIconBg.style.backgroundColor = config.iconBg;
+
+            const tbody = document.getElementById('statModalBody');
+            tbody.innerHTML = '';
+            
+            if (data && data.length > 0) {
+                data.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.style.cssText = 'border-bottom:1px solid #f3f4f6; transition: background 0.15s; cursor: pointer;';
+                    row.onclick = function() {
+                        window.location.href = '<?php echo admin_url('admin.php?page=nds-recipe-details&recipe_id='); ?>' + item.id;
+                    };
+                    row.onmouseover = function() { this.style.background = '#f9fafb'; };
+                    row.onmouseout = function() { this.style.background = ''; };
+                    
+                    const date = new Date(item.created_at).toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'short', 
+                        day: 'numeric' 
+                    });
+
+                    row.innerHTML = `
+                        <td style="padding:0.75rem 1rem;">
+                            <div style="display:flex; align-items:center;">
+                                <div style="width:2rem; height:2rem; background:#f5f3ff; border-radius:0.5rem; display:flex; align-items:center; justify-content:center; margin-right:0.75rem;">
+                                    <i class="fas fa-utensils" style="color:#9333ea; font-size:0.75rem;"></i>
+                                </div>
+                                <div style="font-size:0.875rem; font-weight:600; color:#111827;">${item.recipe_name}</div>
+                            </div>
+                        </td>
+                        <td style="padding:0.75rem 1rem; font-size:0.875rem; color:#6b7280;">${date}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } else {
+                tbody.innerHTML = `<tr><td colspan="2" style="padding:2rem; text-align:center; color:#9ca3af;">No recipes found</td></tr>`;
+            }
+
+            modal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        };
+
+        window.closeStatModal = function() {
+            const modal = document.getElementById('statModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                document.body.style.overflow = '';
+            }
+        };
+    });
+    </script>
     <?php
 }

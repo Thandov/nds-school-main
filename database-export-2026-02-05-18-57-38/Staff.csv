@@ -1,0 +1,41 @@
+id,user_id,first_name,last_name,email,phone,role
+1,10,Lebogang,Lekotokoto,Lebogang@ndsacademy.co.za,111111111,Lecturer
+2,12,Tshepiso,Tunzi,MrsTshepiso@ndsacademy.co.za,111111112,Lecturer
+3,13,Estelle,Holtzhausen,MrsEstelle@ndsacademy.co.za,111111113,Lecturer
+4,14,Pontsho,Mogiwa,MrsPontsho@ndsacademy.co.za,111111114,Lecturer
+5,15,Jacobus,Sutton,MrJacobus@ndsacademy.co.za,111111115,Lecturer
+6,16,Lwethu,Htlatswayo,MsLwethu@ndsacademy.co.za,111111116,Lecturer
+7,17,Nseya,Tshitundui,MsNseya@ndsacademy.co.za,111111117,Lecturer
+8,18,Mpuse,Mnguni,MrsMpuse@ndsacademy.co.za,111111118,Lecturer
+9,19,Irene,Xaba,MsIrene@ndsacademy.co.za,111111119,Lecturer
+10,,Molefe,MrThabo@ndsacademy.co.za,111111120,"Head Chef",
+11,,Johnson,MsSarah@ndsacademy.co.za,111111121,Administrator,
+12,,Nkomo,MrDavid@ndsacademy.co.za,111111122,"Program Coordinator",
+13,,wedfwef,,,,
+14,10,Lebogang,Lekotokoto,Lebogang@ndsacademy.co.za,111111111,Lecturer
+15,12,Tshepiso,Tunzi,MrsTshepiso@ndsacademy.co.za,111111112,Lecturer
+16,13,Estelle,Holtzhausen,MrsEstelle@ndsacademy.co.za,111111113,Lecturer
+17,14,Pontsho,Mogiwa,MrsPontsho@ndsacademy.co.za,111111114,Lecturer
+18,15,Jacobus,Sutton,MrJacobus@ndsacademy.co.za,111111115,Lecturer
+19,16,Lwethu,Htlatswayo,MsLwethu@ndsacademy.co.za,111111116,Lecturer
+20,17,Nseya,Tshitundui,MsNseya@ndsacademy.co.za,111111117,Lecturer
+21,18,Mpuse,Mnguni,MrsMpuse@ndsacademy.co.za,111111118,Lecturer
+22,19,Irene,Xaba,MsIrene@ndsacademy.co.za,111111119,Lecturer
+23,,Molefe,MrThabo@ndsacademy.co.za,111111120,"Head Chef",
+24,,Johnson,MsSarah@ndsacademy.co.za,111111121,Administrator,
+25,,Nkomo,MrDavid@ndsacademy.co.za,111111122,"Program Coordinator",
+26,,wedfwef,,,,
+27,10,Lebogang,Lekotokoto,Lebogang@ndsacademy.co.za,111111111,Lecturer
+28,12,Tshepiso,Tunzi,MrsTshepiso@ndsacademy.co.za,111111112,Lecturer
+29,13,Estelle,Holtzhausen,MrsEstelle@ndsacademy.co.za,111111113,Lecturer
+30,14,Pontsho,Mogiwa,MrsPontsho@ndsacademy.co.za,111111114,Lecturer
+31,15,Jacobus,Sutton,MrJacobus@ndsacademy.co.za,111111115,Lecturer
+32,16,Lwethu,Htlatswayo,MsLwethu@ndsacademy.co.za,111111116,Lecturer
+33,17,Nseya,Tshitundui,MsNseya@ndsacademy.co.za,111111117,Lecturer
+34,18,Mpuse,Mnguni,MrsMpuse@ndsacademy.co.za,111111118,Lecturer
+35,19,Irene,Xaba,MsIrene@ndsacademy.co.za,111111119,Lecturer
+36,,Molefe,MrThabo@ndsacademy.co.za,111111120,"Head Chef",
+37,,Johnson,MsSarah@ndsacademy.co.za,111111121,Administrator,
+38,,Nkomo,MrDavid@ndsacademy.co.za,111111122,"Program Coordinator",
+39,,wedfwef,,,,
+40,,Thando,Hlophe,uoadasoudha,898,Lecturer

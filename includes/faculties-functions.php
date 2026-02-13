@@ -330,30 +330,40 @@ function faculty_form($type, $faculty = null)
 
 function nds_get_faculty_by_course($faculty_id)
 {
-    global $wpdb, $table_courses;
-    $query = $wpdb->prepare("SELECT * FROM $table_courses WHERE faculty_id = %d", $faculty_id);
+    global $wpdb;
+    $table_courses = $wpdb->prefix . "nds_courses";
+    $table_programs = $wpdb->prefix . "nds_programs";
+
+    // Courses belong to programs, which belong to faculties.
+    // So we need to join courses with programs to filter by faculty_id.
+    $query = $wpdb->prepare("
+        SELECT c.* 
+        FROM $table_courses c
+        JOIN $table_programs p ON c.program_id = p.id
+        WHERE p.faculty_id = %d
+    ", $faculty_id);
+    
     $facultyCourses = $wpdb->get_results($query);
     $allCourses = nds_get_courses();
-    $is_checked ="";
-            // Fetch the accreditation bodies
-
-            if ($facultyCourses) {
-                echo '<legend class="text-lg font-semibold text-gray-700">';
-                // Loop through each accreditation body and create a checkbox fix_here
-                foreach ($facultyCourses as $course) {
-                   
-                    foreach($allCourses as $acourse):
-                        $is_checked = ($course->id === $acourse['id']) ? 'checked' : $course->id."|".$acourse['id'];
-                    endforeach;
-                    
-                    echo '<div class="flex items-center">';
-                    echo '<input type="checkbox" name="facultyCourses[]" value="' . $course->id . '" '.$is_checked.' class="mr-2 text-blue-500">';
-                    echo '<label class="text-sm text-gray-700">' . esc_html($course->name) . '</label>';
-                    echo '</div>';
+    
+    if ($facultyCourses) {
+        echo '<legend class="text-lg font-semibold text-gray-700">';
+        foreach ($facultyCourses as $course) {
+            $is_checked = "";
+            foreach($allCourses as $acourse):
+                if ($course->id === $acourse['id']) {
+                    $is_checked = 'checked';
+                    break;
                 }
-                echo '</legend>';
-            } else {
-                echo 'No accreditation bodies found.';
-            }
-
+            endforeach;
+            
+            echo '<div class="flex items-center">';
+            echo '<input type="checkbox" name="facultyCourses[]" value="' . $course->id . '" '.$is_checked.' class="mr-2 text-blue-500">';
+            echo '<label class="text-sm text-gray-700">' . esc_html($course->name) . '</label>';
+            echo '</div>';
+        }
+        echo '</legend>';
+    } else {
+        echo 'No courses found for this faculty.';
+    }
 }

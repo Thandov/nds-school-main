@@ -1,0 +1,24 @@
+id,program_id,level_id,code,name,nqf_level,credits,contact_hours,category_id,is_required,status
+1,1,,HOS01001,"Diploma in Introduction to the Hospitality Industry",5,120,,,1,active
+2,2,,FOO02001,"Advanced Diploma in Culinary Arts and Supervision",6,120,,,1,active
+3,2,,FOO02002,"Diploma Patisserie and Confectionery",5,120,,,1,active
+4,3,,FOO03001,"Diploma Food and Beverage Service",5,120,,,1,active
+5,4,,HOU04001,"Diploma in Housekeeping Service",5,120,,,1,active
+6,4,,HOU04002,"Advanced Diploma in Housekeeping Service",6,120,,,1,active
+7,7,,BAR07001,"Advanced Diploma in Barista",5,60,,,1,active
+8,9,,COO09001,"Basic Cooking Course",3,8,,,1,active
+9,9,,COO09002,"Advance Cooking Course",4,12,,,1,active
+10,10,,CAT10001,"Catering Fundamentals",3,8,,,1,active
+11,11,,BAK11001,"Basic Baking Course (Variety of doughs)",3,8,,,1,active
+12,11,,BAK11002,"Advanced Baking Course",4,12,,,1,active
+13,11,,BAK11003,"One day Biscuit Making",3,1,,,1,active
+14,12,,CON12001,"Variety of Baking skills with different toppings",3,8,,,1,active
+15,13,,TRA13001,"Trade test - Artisan Chef",5,60,,,1,active
+16,14,,PC101,"Artisan Chef",5,12,,,1,active
+17,15,,adfewf,2efecfer,3,21,,,1,active
+18,16,,d133,r3v3rwvrvr3v,3,435,,,1,active
+19,16,,r42,3rfr3f,3,3,,,1,active
+20,16,,3g5g5g,g4ttggte,34,345,,,1,active
+21,15,,889h99,90i0909i,89,0,,,1,active
+22,17,,adse,"thapi thapi",23,0,,,1,active
+67,52,,89hqh98qed,"Diploma in Digital Chef essentails",4,32,,,1,active

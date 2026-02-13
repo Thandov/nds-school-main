@@ -52,6 +52,7 @@ function nds_school_create_tables()
     $t_application_docs         = $wpdb->prefix . 'nds_application_documents';
     $t_application_reviews      = $wpdb->prefix . 'nds_application_reviews';
     $t_application_payments     = $wpdb->prefix . 'nds_application_payments';
+    $t_notifications            = $wpdb->prefix . 'nds_notifications';
 
     // -------------------------------------------------------------------------
     // 1. FACULTIES (Schools/Colleges)
@@ -354,6 +355,7 @@ function nds_school_create_tables()
         wp_user_id BIGINT(20) UNSIGNED NULL,
         source ENUM('application','manual_import','admin') DEFAULT 'application',
         faculty_id INT NULL,
+        program_id INT NULL,
         first_name VARCHAR(100) NOT NULL,
         last_name VARCHAR(100) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
@@ -377,9 +379,12 @@ function nds_school_create_tables()
         claimed_at DATETIME NULL,
         claimed_by_user_id BIGINT(20) UNSIGNED NULL,
         FOREIGN KEY (faculty_id) REFERENCES $t_faculties(id) ON DELETE SET NULL,
+        FOREIGN KEY (program_id) REFERENCES $t_programs(id) ON DELETE SET NULL,
         FOREIGN KEY (claimed_by_user_id) REFERENCES {$wpdb->prefix}users(ID) ON DELETE SET NULL,
         INDEX idx_source (source),
         INDEX idx_is_claimed (is_claimed),
+        INDEX idx_faculty (faculty_id),
+        INDEX idx_program (program_id),
         INDEX idx_intake_year (intake_year),
         INDEX idx_intake_semester (intake_semester),
         INDEX idx_expected_completion_year (expected_completion_year),
@@ -413,6 +418,15 @@ function nds_school_create_tables()
         $wpdb->query("ALTER TABLE $t_students ADD COLUMN intake_semester VARCHAR(50) NULL");
         $wpdb->query("ALTER TABLE $t_students ADD INDEX idx_intake_semester (intake_semester)");
     }
+    // Backward-compatible migration: ensure program_id column exists
+    $student_columns = $wpdb->get_col("SHOW COLUMNS FROM $t_students LIKE 'program_id'");
+    if (empty($student_columns)) {
+        $wpdb->query("ALTER TABLE $t_students ADD COLUMN program_id INT NULL AFTER faculty_id");
+        $wpdb->query("ALTER TABLE $t_students ADD INDEX idx_program (program_id)");
+        // Try to add FK as well
+        $wpdb->query("ALTER TABLE $t_students ADD CONSTRAINT fk_students_program FOREIGN KEY (program_id) REFERENCES $t_programs(id) ON DELETE SET NULL");
+    }
+
 
     // ACADEMIC YEARS
     $sql_academic_years = "CREATE TABLE IF NOT EXISTS $t_academic_years (
@@ -666,6 +680,24 @@ function nds_school_create_tables()
     dbDelta($sql_application_payments);
 
     // -------------------------------------------------------------------------
+    // 11. NOTIFICATIONS
+    // -------------------------------------------------------------------------
+    $t_notifications = $wpdb->prefix . 'nds_notifications';
+    $sql_notifications = "CREATE TABLE IF NOT EXISTS $t_notifications (
+        id bigint(20) NOT NULL AUTO_INCREMENT,
+        student_id bigint(20) NOT NULL,
+        title varchar(255) NOT NULL,
+        message text NOT NULL,
+        type varchar(50) DEFAULT 'info',
+        link varchar(255) DEFAULT '',
+        is_read tinyint(1) DEFAULT 0,
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY student_id (student_id)
+    ) $charset_collate;";
+    dbDelta($sql_notifications);
+
+    // -------------------------------------------------------------------------
     // ADDITIONAL TABLES (Still in use - Keep these!)
     // -------------------------------------------------------------------------
 
@@ -897,6 +929,44 @@ function nds_school_create_tables()
     INDEX idx_province (province)
 ) $charset_collate;";
     dbDelta($sql_claimed_learners);
+
+    // STUDENT ACTIVITY LOG
+    $t_activity_log = $wpdb->prefix . 'nds_student_activity_log';
+    $sql_activity_log = "CREATE TABLE IF NOT EXISTS $t_activity_log (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        student_id INT NOT NULL,
+        actor_id BIGINT(20) UNSIGNED NULL,
+        action VARCHAR(255) NOT NULL,
+        action_type VARCHAR(50),
+        old_values LONGTEXT NULL,
+        new_values LONGTEXT NULL,
+        ip_address VARCHAR(45),
+        user_agent TEXT,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (student_id) REFERENCES $t_students(id) ON DELETE CASCADE,
+        FOREIGN KEY (actor_id) REFERENCES {$wpdb->prefix}users(ID) ON DELETE SET NULL,
+        INDEX idx_student (student_id),
+        INDEX idx_timestamp (timestamp)
+    ) $charset_collate;";
+    dbDelta($sql_activity_log);
+
+    // STUDENT NOTIFICATIONS
+    $t_notifications = $wpdb->prefix . 'nds_notifications';
+    $sql_notifications = "CREATE TABLE IF NOT EXISTS $t_notifications (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        student_id INT NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        type ENUM('info', 'success', 'warning', 'error', 'timetable') DEFAULT 'info',
+        link VARCHAR(255) NULL,
+        is_read TINYINT(1) DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (student_id) REFERENCES $t_students(id) ON DELETE CASCADE,
+        INDEX idx_student (student_id),
+        INDEX idx_is_read (is_read),
+        INDEX idx_created_at (created_at)
+    ) $charset_collate;";
+    dbDelta($sql_notifications);
 
     // Backfill claim/import metadata from claimed_learners into students (idempotent)
     $backfill_sql = "

@@ -69,9 +69,13 @@ function nds_program_card($program, $option = 1)
 
                 <!-- Action Button -->
                 <div class="flex items-center gap-2">
+                    <a href="<?php echo admin_url('admin.php?page=nds-courses&program_id=' . $program['id']); ?>"
+                        class="inline-flex items-center px-3 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors shadow-sm">
+                        <i class="fas fa-eye mr-1"></i>View Qualifications
+                    </a>
                     <a href="<?php echo admin_url('admin.php?page=nds-courses&edit_program=' . $program['id']); ?>"
-                        class="inline-flex items-center px-3 py-1 text-xs font-medium text-white bg-gray-600 hover:bg-gray-700 rounded">
-                        <i class="fas fa-book mr-1"></i>Courses
+                        class="inline-flex items-center px-3 py-1 text-xs font-medium text-white bg-gray-600 hover:bg-gray-700 rounded transition-colors shadow-sm">
+                        <i class="fas fa-edit mr-1"></i>Edit
                     </a>
                 </div>
             </div>
@@ -145,9 +149,62 @@ function nds_program_card($program, $option = 1)
         </div>
     <?php
     }
+    if ($option == 3) {
+        // Style Three - Premium Card Design
+    ?>
+        <div class="group relative bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden flex flex-col h-full">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-indigo-600 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+            
+            <div class="p-6 flex-1">
+                <div class="flex justify-between items-start mb-4">
+                    <div class="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300">
+                        <i class="fas fa-graduation-cap text-xl"></i>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-100">
+                        Active
+                    </span>
+                </div>
+
+                <h3 class="text-xl font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
+                    <?php echo esc_html($program['name']); ?>
+                </h3>
+                
+                <?php if (!empty($program['description'])): ?>
+                    <p class="text-gray-500 text-sm mb-6 line-clamp-3 leading-relaxed">
+                        <?php echo esc_html($program['description']); ?>
+                    </p>
+                <?php endif; ?>
+
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="bg-gray-50 rounded-xl p-3 border border-gray-100 transition-colors group-hover:bg-white group-hover:border-blue-100">
+                        <div class="text-xs text-gray-500 mb-1">Qualifications</div>
+                        <div class="text-lg font-bold text-gray-900"><?php echo intval($program['course_count']); ?></div>
+                    </div>
+                    <div class="bg-gray-50 rounded-xl p-3 border border-gray-100 transition-colors group-hover:bg-white group-hover:border-blue-100">
+                        <div class="text-xs text-gray-500 mb-1">Duration</div>
+                        <div class="text-lg font-bold text-gray-900"><?php echo esc_html(isset($program['duration_months']) ? $program['duration_months'] : '12'); ?>m</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-6 pt-0 mt-auto flex gap-3">
+                <a href="<?php echo admin_url('admin.php?page=nds-courses&program_id=' . $program['id']); ?>"
+                   class="flex-[2] inline-flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg active:scale-95">
+                    <i class="fas fa-eye text-xs"></i>
+                    View Qualifications
+                </a>
+                <a href="<?php echo admin_url('admin.php?page=nds-courses&edit_program=' . $program['id']); ?>"
+                   class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-200 transition-all active:scale-95">
+                    <i class="fas fa-edit text-xs"></i>
+                    Edit
+                </a>
+            </div>
+        </div>
+    <?php
+    }
 }
 
-// Modern Programs Management with Tailwind CSS
+// Modern Faculties Management with Tailwind CSS (under a Program)
 function nds_programs_page_tailwind()
 {
     if (!current_user_can('manage_options')) {
@@ -159,10 +216,10 @@ function nds_programs_page_tailwind()
     $table_courses = $wpdb->prefix . 'nds_courses';
     $table_paths = $wpdb->prefix . 'nds_faculties';
 
-    // Get faculty_id from URL for filtering
+    // Get program_id (formerly faculty_id) from URL for filtering
     $filter_faculty_id = isset($_GET['faculty_id']) ? intval($_GET['faculty_id']) : 0;
 
-    // Get programs with course counts
+    // Get faculties with course counts (stored in nds_programs but conceptually Faculties)
     $programs = array();
     if ($filter_faculty_id > 0) {
         $programs = $wpdb->get_results($wpdb->prepare("
@@ -190,13 +247,13 @@ function nds_programs_page_tailwind()
         ", ARRAY_A);
     }
 
-    // Get the current faculty info if filtering by faculty_id
+    // Get the current program info if filtering by faculty_id
     $current_path = null;
     if ($filter_faculty_id) {
         $current_path = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table_paths} WHERE id = %d", $filter_faculty_id), ARRAY_A);
     }
 
-    // Get all faculties for filter dropdown
+    // Get all programs (stored in nds_faculties) for filter dropdown
     $all_faculties = $wpdb->get_results("SELECT id, name FROM {$table_paths} ORDER BY name", ARRAY_A);
 
     // Get recent programs
@@ -209,13 +266,26 @@ function nds_programs_page_tailwind()
     // Statistics
     $total_programs = count($programs);
     $active_programs = $total_programs; // All programs are considered active for now
-    $total_courses = array_sum(array_column($programs, 'course_count'));
+    
+    // Get all courses with their parent faculty name for the modal
+    $courses_list = $wpdb->get_results("
+        SELECT c.*, p.name as parent_name 
+        FROM {$table_courses} c 
+        LEFT JOIN {$table_programs} p ON c.program_id = p.id 
+        ORDER BY c.name
+    ", ARRAY_A);
+    $total_courses = count($courses_list);
+
+    // Get all programs (Education Paths) with details for the modal
+    $path_data_list = $wpdb->get_results("
+        SELECT * FROM {$table_paths} ORDER BY name
+    ", ARRAY_A);
 
     // Get faculty_id from URL for auto-selection
     $selected_faculty_id = isset($_GET['faculty_id']) ? intval($_GET['faculty_id']) : 0;
 
     ?>
-    <div class="nds-tailwind-wrapper bg-gray-50 min-h-screen" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <div class="nds-tailwind-wrapper bg-gray-50 pb-12" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin-left: -20px; padding-left: 20px; margin-top: -20px;">
         <!-- Header -->
         <div class="bg-white shadow-sm border-b border-gray-200">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -226,9 +296,11 @@ function nds_programs_page_tailwind()
                         </div>
                         <div>
                             <h1 class="text-3xl font-bold text-gray-900">
-                                <?php echo $current_path ? esc_html($current_path['name']) : 'Programs Management'; ?>
+                                <?php echo $current_path ? esc_html($current_path['name']) : 'Faculties Management'; ?>
                             </h1>
-                            <p class="text-gray-600"><?php echo $current_path ? 'Programs under this faculty' : 'Manage academic programs and their associated courses'; ?></p>
+                            <p class="text-gray-600">
+                                <?php echo $current_path ? 'Faculties under this program' : 'Manage faculties and their associated qualifications'; ?>
+                            </p>
                         </div>
                     </div>
                     <div class="flex items-center space-x-3">
@@ -248,12 +320,12 @@ function nds_programs_page_tailwind()
                             <a href="<?php echo admin_url('admin.php?page=nds-faculties'); ?>"
                                 class="inline-flex items-center px-4 py-2 rounded-lg bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-medium shadow-sm">
                                 <span class="dashicons dashicons-networking mr-1 text-base"></span>
-                                Create Faculty First
+                                Create Program First
                             </a>
                 <?php else: ?>
                             <a href="#addProgramModal" class="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium shadow-sm">
                                 <span class="dashicons dashicons-plus-alt2 mr-1 text-base"></span>
-                                Add Program
+                                Add Faculty
                             </a>
                 <?php endif; ?>
         </div>
@@ -303,61 +375,62 @@ function nds_programs_page_tailwind()
 
             <!-- Statistics Cards -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <!-- Total Faculties -->
+                <div onclick="openStatModal('faculties')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Total Programs</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Total Faculties</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
                                 <?php echo number_format_i18n($total_programs); ?>
                             </p>
                         </div>
                         <div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
-                            <span class="dashicons dashicons-welcome-learn-more text-blue-600 text-xl"></span>
+                            <i class="dashicons dashicons-welcome-learn-more text-blue-600 text-xl"></i>
+                        </div>
                     </div>
                 </div>
-                        </div>
 
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <!-- Active Faculties -->
+                <div onclick="openStatModal('active_faculties')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Active Programs</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Active Faculties</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
                                 <?php echo number_format_i18n($active_programs); ?>
                             </p>
                         </div>
                         <div class="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
-                            <span class="dashicons dashicons-yes-alt text-emerald-600 text-xl"></span>
+                            <i class="dashicons dashicons-yes-alt text-emerald-600 text-xl"></i>
+                        </div>
                     </div>
                 </div>
-                        </div>
 
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <!-- Total Courses -->
+                <div onclick="openStatModal('courses')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Total Courses</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Total Courses</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
                                 <?php echo number_format_i18n($total_courses); ?>
                             </p>
                         </div>
                         <div class="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center">
-                            <span class="dashicons dashicons-book text-purple-600 text-xl"></span>
+                            <i class="dashicons dashicons-book text-purple-600 text-xl"></i>
+                        </div>
                     </div>
                 </div>
-                        </div>
 
-                <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                <!-- Programs -->
+                <div onclick="openStatModal('programs')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-500">Faculties</p>
+                            <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Programs</p>
                             <p class="mt-2 text-2xl font-semibold text-gray-900">
-                                <?php
-                                                                        $unique_paths = array_unique(array_column($programs, 'path_name'));
-                                echo number_format_i18n(count(array_filter($unique_paths)));
-                                ?>
+                                <?php echo number_format_i18n(count($all_faculties)); ?>
                             </p>
                         </div>
                         <div class="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center">
-                            <span class="dashicons dashicons-networking text-orange-600 text-xl"></span>
+                            <i class="dashicons dashicons-networking text-orange-600 text-xl"></i>
                         </div>
                     </div>
                 </div>
@@ -367,14 +440,23 @@ function nds_programs_page_tailwind()
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                 <div class="flex items-center justify-between">
                     <div>
-                        <h3 class="text-lg font-semibold text-gray-900">Filter by Faculty</h3>
-                        <p class="text-sm text-gray-500">Select a faculty to view only its programs</p>
+                        <h3 class="text-lg font-semibold text-gray-900">Filter by Program</h3>
+                        <p class="text-sm text-gray-500">Select a program to view only its faculties</p>
                     </div>
                     <div class="flex items-center space-x-3">
                         <form method="GET" action="" class="flex items-center space-x-3">
                             <input type="hidden" name="page" value="nds-programs">
+                            
+                            <!-- Qualification Component Dropdown -->
+                            <select name="qualification_component" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <option value="">Qualification Component</option>
+                                <option value="academic">Academic</option>
+                                <option value="practical">Practical</option>
+                                <option value="workplace">Workplace</option>
+                            </select>
+
                             <select name="faculty_id" onchange="this.form.submit()" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
-                                <option value="">All Faculties</option>
+                                <option value="">All Programs</option>
                                 <?php foreach ($all_faculties as $faculty): ?>
                                     <option value="<?php echo esc_attr($faculty['id']); ?>" <?php selected($filter_faculty_id, $faculty['id']); ?>>
                                         <?php echo esc_html($faculty['name']); ?>
@@ -389,13 +471,15 @@ function nds_programs_page_tailwind()
             <!-- Main Content Grid -->
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                <!-- Programs List -->
+                <!-- Faculties List -->
                 <div class="lg:col-span-2">
                     <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                         <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
                             <div>
-                                <h2 class="text-sm font-semibold text-gray-900"><?php echo $current_path ? 'Programs' : 'All Programs'; ?></h2>
-                                <p class="text-xs text-gray-500">Manage and organize your programs</p>
+                                <h2 class="text-sm font-semibold text-gray-900">
+                                    <?php echo $current_path ? 'Faculties' : 'All Faculties'; ?>
+                                </h2>
+                                <p class="text-xs text-gray-500">Manage and organize your faculties</p>
                             </div>
                         </div>
 
@@ -405,8 +489,8 @@ function nds_programs_page_tailwind()
                                     <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                                         <span class="dashicons dashicons-welcome-learn-more text-gray-400 text-3xl"></span>
                                     </div>
-                                    <h4 class="text-lg font-semibold text-gray-900 mb-2">No Programs Found</h4>
-                                    <p class="text-sm text-gray-500 mb-6">Get started by creating your first academic program.</p>
+                                    <h4 class="text-lg font-semibold text-gray-900 mb-2">No Faculties Found</h4>
+                                    <p class="text-sm text-gray-500 mb-6">Get started by creating your first faculty in this program.</p>
                                     <div class="flex flex-col sm:flex-row gap-3 justify-center items-center">
                                         <?php if (empty($all_faculties)): ?>
                                             <a href="<?php echo admin_url('admin.php?page=nds-faculties'); ?>"
@@ -415,7 +499,7 @@ function nds_programs_page_tailwind()
                                             </a>
                                         <?php else: ?>
                                             <a href="#addProgramModal" class="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors">
-                                                <span class="dashicons dashicons-plus-alt2 mr-2 text-base"></span>Create Program
+                                                <span class="dashicons dashicons-plus-alt2 mr-2 text-base"></span>Create Faculty
                                             </a>
                                         <?php endif; ?>
                                     </div>
@@ -425,9 +509,9 @@ function nds_programs_page_tailwind()
                                     <table id="programsTable" class="min-w-full divide-y divide-gray-200 text-sm">
                                         <thead class="bg-gray-50">
                                             <tr>
-                                                <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Programme</th>
                                                 <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Faculty</th>
-                                                <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Courses</th>
+                                                <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Program</th>
+                                                <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Qualifications</th>
                                                 <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Duration (months)</th>
                                                 <th scope="col" class="px-4 py-3 text-left font-semibold text-gray-700">Type</th>
                                                 <th scope="col" class="px-4 py-3 text-right font-semibold text-gray-700">Actions</th>
@@ -460,17 +544,17 @@ function nds_programs_page_tailwind()
                                                     </td>
                                                     <td class="px-4 py-3 align-top text-right">
                                                         <div class="inline-flex items-center gap-2">
+                                                            <a href="<?php echo admin_url('admin.php?page=nds-courses&program_id=' . $program['id']); ?>"
+                                                               class="inline-flex items-center px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium">
+                                                                <i class="fas fa-eye mr-1 text-sm"></i>
+                                                                View Qualifications
+                                                            </a>
                                                             <button type="button"
                                                                 onclick="openAddCourseModal(<?php echo $program['id']; ?>, '<?php echo esc_js($program['name']); ?>')"
-                                                                class="inline-flex items-center px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium">
+                                                                class="inline-flex items-center px-3 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-700 text-white text-xs font-medium">
                                                                 <span class="dashicons dashicons-plus-alt2 mr-1 text-sm"></span>
-                                                                Add Course
+                                                                Add Qualification
                                                             </button>
-                                                            <a href="<?php echo admin_url('admin.php?page=nds-courses&program_id=' . $program['id']); ?>"
-                                                               class="inline-flex items-center px-3 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-700 text-white text-xs font-medium">
-                                                                <span class="dashicons dashicons-book mr-1 text-sm"></span>
-                                                                Manage
-                                                            </a>
                                                             <button type="button"
                                                                 onclick="confirmDelete(<?php echo $program['id']; ?>, '<?php echo esc_js($program['name']); ?>')"
                                                                 class="inline-flex items-center px-2 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 text-xs font-medium">
@@ -491,15 +575,15 @@ function nds_programs_page_tailwind()
                     <!-- Sidebar -->
                     <div class="space-y-6">
 
-                        <!-- Recent Programs -->
+                        <!-- Recent Faculties -->
                         <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                             <div class="px-5 py-4 border-b border-gray-100">
-                                <h2 class="text-sm font-semibold text-gray-900">Recent Programs</h2>
-                                <p class="text-xs text-gray-500">Latest programs created</p>
+                                <h2 class="text-sm font-semibold text-gray-900">Recent Faculties</h2>
+                                <p class="text-xs text-gray-500">Latest faculties created</p>
                             </div>
                             <div class="p-4">
                                 <?php if (empty($recent_programs)): ?>
-                                    <p class="text-gray-500 text-sm">No recent programs</p>
+                                    <p class="text-gray-500 text-sm">No recent faculties</p>
                                 <?php else: ?>
                                     <div class="space-y-3">
                                         <?php foreach ($recent_programs as $program): ?>
@@ -531,7 +615,7 @@ function nds_programs_page_tailwind()
                                 </a>
                                 <a href="<?php echo admin_url('admin.php?page=nds-faculties'); ?>"
                                     class="w-full inline-flex items-center justify-center px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium">
-                                    <span class="dashicons dashicons-networking mr-2 text-base"></span>Manage Faculties
+                                    <span class="dashicons dashicons-networking mr-2 text-base"></span>Manage Programs
                                 </a>
                                 <button type="button" onclick="exportPrograms()"
                                     class="w-full inline-flex items-center justify-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm font-medium">
@@ -553,7 +637,7 @@ function nds_programs_page_tailwind()
                         <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
                             <div class="flex items-center">
                                 <span class="dashicons dashicons-plus-alt2 text-blue-600 mr-3 text-xl"></span>
-                                <h2 class="text-xl font-semibold text-gray-900">Add New Program</h2>
+                                <h2 class="text-xl font-semibold text-gray-900">Add New Faculty</h2>
                             </div>
                             <button type="button" onclick="closeModal()" class="text-gray-400 hover:text-gray-600 transition-colors p-2 rounded-lg hover:bg-gray-100">
                                 <span class="dashicons dashicons-no-alt text-xl"></span>
@@ -633,9 +717,180 @@ function nds_programs_page_tailwind()
         </style>
 
         <!-- Include Auto-Select Helper -->
-        <script src="<?php echo plugin_dir_url(__FILE__); ?>modal-auto-select.js"></script>
+        <!-- Stat Card Modal (Matching Student Management Style) -->
+        <div id="statModal" class="hidden" style="position:fixed; inset:0; z-index:999999; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+            <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5);" onclick="closeStatModal()"></div>
+            <div style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:1rem;">
+                <div style="background:#fff; border-radius:1rem; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); width:100%; max-width:42rem; max-height:80vh; display:flex; flex-direction:column; position:relative;">
+                    <!-- Modal Header -->
+                    <div id="statModalHeader" style="display:flex; align-items:center; justify-content:space-between; padding:1rem 1.5rem; border-bottom:1px solid #e5e7eb; border-radius:1rem 1rem 0 0;">
+                        <div style="display:flex; align-items:center; gap:0.75rem;">
+                            <div id="modalIconBg" style="width:2.5rem; height:2.5rem; border-radius:0.5rem; display:flex; align-items:center; justify-content:center;">
+                                <i id="modalIcon" style="font-size:1.25rem;"></i>
+                            </div>
+                            <div>
+                                <h3 id="statModalTitle" style="font-size:1.125rem; font-weight:700; color:#111827; margin:0;"></h3>
+                                <p id="statModalCount" style="font-size:0.875rem; color:#6b7280; margin:0;"></p>
+                            </div>
+                        </div>
+                        <button onclick="closeStatModal()" style="color:#9ca3af; padding:0.5rem; border-radius:0.5rem; border:none; background:none; cursor:pointer;" onmouseover="this.style.color='#4b5563'; this.style.background='#f3f4f6'" onmouseout="this.style.color='#9ca3af'; this.style.background='none'">
+                            <i class="fas fa-times" style="font-size:1.25rem;"></i>
+                        </button>
+                    </div>
+                    <!-- Modal Body (Scrollable) -->
+                    <div style="overflow-y:auto; flex:1; padding:0.5rem;">
+                        <table style="width:100%; border-collapse:collapse;">
+                            <thead style="background:#f9fafb; position:sticky; top:0; z-index:10;">
+                                <tr>
+                                    <th id="col1Header" style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; font-weight:500; color:#6b7280; text-transform:uppercase;"></th>
+                                    <th id="col2Header" style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; font-weight:500; color:#6b7280; text-transform:uppercase;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="statModalBody">
+                                <!-- Dynamic Content -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <!-- Modal Footer -->
+                    <div style="padding:0.75rem 1.5rem; border-top:1px solid #e5e7eb; background:#f9fafb; border-radius:0 0 1rem 1rem; text-align:right;">
+                        <button onclick="closeStatModal()" style="padding:0.5rem 1rem; font-size:0.875rem; font-weight:500; color:#374151; background:#fff; border:1px solid #d1d5db; border-radius:0.5rem; cursor:pointer;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#fff'">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <script>
+            const statsData = {
+                faculties: <?php echo json_encode($programs); ?>,
+                active_faculties: <?php echo json_encode($programs); ?>,
+                courses: <?php echo json_encode($courses_list); ?>,
+                programs: <?php echo json_encode($path_data_list); ?>
+            };
+
+            const modalConfig = {
+                faculties: {
+                    title: 'Total Faculties',
+                    col1: 'Faculty Name',
+                    col2: 'Parent Program',
+                    icon: 'dashicons dashicons-welcome-learn-more',
+                    iconColor: '#2563eb',
+                    iconBg: '#eff6ff'
+                },
+                active_faculties: {
+                    title: 'Active Faculties',
+                    col1: 'Faculty Name',
+                    col2: 'Parent Program',
+                    icon: 'dashicons dashicons-yes-alt',
+                    iconColor: '#059669',
+                    iconBg: '#ecfdf5'
+                },
+                courses: {
+                    title: 'Total Courses',
+                    col1: 'Course Name',
+                    col2: 'Faculty',
+                    icon: 'dashicons dashicons-book',
+                    iconColor: '#7c3aed',
+                    iconBg: '#f5f3ff'
+                },
+                programs: {
+                    title: 'Programs',
+                    col1: 'Program Name',
+                    col2: 'Description',
+                    icon: 'dashicons dashicons-networking',
+                    iconColor: '#ea580c',
+                    iconBg: '#fff7ed'
+                }
+            };
+
+            function openStatModal(type) {
+                const modal = document.getElementById('statModal');
+                const config = modalConfig[type];
+                const data = statsData[type];
+                
+                if (!modal || !config || !data) return;
+
+                // Set Text & Icons
+                document.getElementById('statModalTitle').textContent = config.title;
+                document.getElementById('statModalCount').textContent = data.length + ' item' + (data.length !== 1 ? 's' : '');
+                document.getElementById('col1Header').textContent = config.col1;
+                document.getElementById('col2Header').textContent = config.col2;
+                
+                const modalIcon = document.getElementById('modalIcon');
+                const modalIconBg = document.getElementById('modalIconBg');
+                
+                if (config.icon.startsWith('dashicons')) {
+                    modalIcon.className = 'dashicons ' + config.icon.replace('dashicons ', '');
+                } else {
+                    modalIcon.className = config.icon;
+                }
+                
+                modalIcon.style.color = config.iconColor;
+                modalIconBg.style.backgroundColor = config.iconBg;
+
+                // Populate Table
+                const tbody = document.getElementById('statModalBody');
+                tbody.innerHTML = '';
+                
+                if (data && data.length > 0) {
+                    data.forEach(item => {
+                        const row = document.createElement('tr');
+                        row.style.cssText = 'border-bottom:1px solid #f3f4f6; transition: background 0.15s;';
+                        row.onmouseover = function() { this.style.background = '#f9fafb'; };
+                        row.onmouseout = function() { this.style.background = ''; };
+                        
+                        let name = item.name || 'N/A';
+                        let detail = '';
+                        let iconClass = 'fas fa-folder';
+                        let iconColor = '#10b981';
+
+                        if (type === 'faculties' || type === 'active_faculties') {
+                            detail = item.path_name || '—';
+                            iconClass = 'dashicons dashicons-admin-page';
+                            iconColor = '#10b981';
+                        } else if (type === 'courses') {
+                            detail = item.parent_name || '—';
+                            iconClass = 'dashicons dashicons-welcome-learn-more';
+                            iconColor = '#8b5cf6';
+                        } else if (type === 'programs') {
+                            detail = item.description || 'No description';
+                            iconClass = 'fas fa-graduation-cap';
+                            iconColor = '#3b82f6';
+                        }
+
+                        row.innerHTML = `
+                            <td style="padding:0.75rem 1rem;">
+                                <div style="display:flex; align-items:center;">
+                                    <div style="width:2rem; height:2rem; background:#f0fdf4; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-right:0.75rem;">
+                                        <i class="${iconClass}" style="color:${iconColor}; font-size:0.75rem;"></i>
+                                    </div>
+                                    <div>
+                                        <div style="font-size:0.875rem; font-weight:600; color:#111827;">${name}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td style="padding:0.75rem 1rem; font-size:0.875rem; color:#6b7280; font-weight:400;">${detail}</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td colspan="2" style="padding:2rem 1rem; text-align:center; color:#9ca3af; font-style:italic;">No items found</td>`;
+                    tbody.appendChild(row);
+                }
+
+                // Show Modal
+                modal.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            }
+
+            function closeStatModal() {
+                const modal = document.getElementById('statModal');
+                if (modal) {
+                    modal.classList.add('hidden');
+                    document.body.style.overflow = '';
+                }
+            }
+
             function openProgramModal() {
                 const modal = document.getElementById('addProgramModal');
                 if (modal) {

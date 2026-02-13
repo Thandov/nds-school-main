@@ -1,0 +1,106 @@
+=== NDS School Database Excel Setup Guide ===
+
+This guide will help you create an Excel file with linked dropdowns from the exported CSV files.
+
+STEP 1: Create New Excel Workbook
+1. Open Microsoft Excel
+2. Create a new workbook
+
+STEP 2: Import CSV Files as Sheets
+For each CSV file in this directory:
+1. Go to Data > Get External Data > From Text
+2. Select the CSV file
+3. Follow the Text Import Wizard (use defaults)
+4. Rename the sheet to match the table name
+
+Import order (important for dropdown relationships):
+- Accreditation Bodies (Accreditation_Bodies.csv)
+- Program Types (Program_Types.csv)
+- Course Categories (Course_Categories.csv)
+- Programs (Programs.csv)
+- Faculties (Faculties.csv)
+- Program Levels (Program_Levels.csv)
+- Courses (Courses.csv)
+- Course Prerequisites (Course_Prerequisites.csv)
+- Program Accreditations (Program_Accreditations.csv)
+- Course Accreditations (Course_Accreditations.csv)
+- Academic Years (Academic_Years.csv)
+- Semesters (Semesters.csv)
+- Course Schedules (Course_Schedules.csv)
+- Staff (Staff.csv)
+- Students (Students.csv)
+
+STEP 3: Set Up Dropdown Validations
+
+Sheet: Faculties
+  - Column 'faculty_id': Data Validation > List > Source: =Programs!$B:$B
+    Note: This dropdown will show names/values. Enter the corresponding ID in the cell.
+  - Column 'program_type_id': Data Validation > List > Source: =Program Types!$B:$B
+    Note: This dropdown will show names/values. Enter the corresponding ID in the cell.
+  - Column 'accreditation_body_id': Data Validation > List > Source: =Accreditation Bodies!$B:$B
+    Note: This dropdown will show names/values. Enter the corresponding ID in the cell.
+
+Sheet: Program Levels
+  - Column 'program_id': Data Validation > List > Source: =Faculties!$D:$E
+    Note: This dropdown will show names/values. Enter the corresponding ID in the cell.
+
+Sheet: Courses
+  - Column 'program_id': Data Validation > List > Source: =Faculties!$D:$E
+    Note: This dropdown will show names/values. Enter the corresponding ID in the cell.
+  - Column 'level_id': Data Validation > List > Source: =Program Levels!$C:$C
+    Note: This dropdown will show names/values. Enter the corresponding ID in the cell.
+  - Column 'category_id': Data Validation > List > Source: =Course Categories!$B:$B
+    Note: This dropdown will show names/values. Enter the corresponding ID in the cell.
+
+Sheet: Course Prerequisites
+  - Column 'course_id': Data Validation > List > Source: =Courses!$D:$E
+    Note: This dropdown will show names/values. Enter the corresponding ID in the cell.
+  - Column 'prerequisite_course_id': Data Validation > List > Source: =Courses!$D:$E
+    Note: This dropdown will show names/values. Enter the corresponding ID in the cell.
+
+Sheet: Program Accreditations
+  - Column 'program_id': Data Validation > List > Source: =Faculties!$D:$E
+    Note: This dropdown will show names/values. Enter the corresponding ID in the cell.
+  - Column 'accreditation_body_id': Data Validation > List > Source: =Accreditation Bodies!$B:$B
+    Note: This dropdown will show names/values. Enter the corresponding ID in the cell.
+
+Sheet: Course Accreditations
+  - Column 'course_id': Data Validation > List > Source: =Courses!$D:$E
+    Note: This dropdown will show names/values. Enter the corresponding ID in the cell.
+  - Column 'accreditation_body_id': Data Validation > List > Source: =Accreditation Bodies!$B:$B
+    Note: This dropdown will show names/values. Enter the corresponding ID in the cell.
+
+Sheet: Semesters
+  - Column 'academic_year_id': Data Validation > List > Source: =Academic Years!$B:$B
+    Note: This dropdown will show names/values. Enter the corresponding ID in the cell.
+
+Sheet: Course Schedules
+  - Column 'course_id': Data Validation > List > Source: =Courses!$D:$E
+    Note: This dropdown will show names/values. Enter the corresponding ID in the cell.
+  - Column 'lecturer_id': Data Validation > List > Source: =Staff!$C:$C
+    Note: This dropdown will show names/values. Enter the corresponding ID in the cell.
+
+Sheet: Students
+  - Column 'faculty_id': Data Validation > List > Source: =Programs!$B:$B
+    Note: This dropdown will show names/values. Enter the corresponding ID in the cell.
+
+STEP 4: Format and Save
+1. Format headers (bold, background color)
+2. Adjust column widths
+3. Save as: nds-school-database.xlsx
+
+=== Dropdown Reference ===
+When setting up dropdowns, reference these columns:
+
+- Accreditation Bodies: Column B (Name/Display Value)
+- Program Types: Column B (Name/Display Value)
+- Course Categories: Column B (Name/Display Value)
+- Programs: Column B (Name/Display Value)
+- Academic Years: Column B (Name/Display Value)
+- Semesters: Column B (Name/Display Value)
+- Staff: Column B (Name/Display Value)
+
+=== Important Notes ===
+- Dropdowns show names/values for easy selection
+- You still need to enter the corresponding ID numbers in the ID columns
+- For example: Select 'Hospitality Management' from dropdown, then enter '1' in faculty_id column

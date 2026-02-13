@@ -78,7 +78,7 @@ function nds_recipe_details_page_tailwind() {
     $error = isset($_GET['error']) ? sanitize_text_field($_GET['error']) : '';
 
     ?>
-    <div class="nds-tailwind-wrapper bg-gray-50 min-h-screen p-8" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <div class="nds-tailwind-wrapper bg-gray-50 pb-12 p-8" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin-left: -20px; padding-left: 20px; margin-top: -20px;">
 
         <!-- Success/Error Messages -->
         <?php if ($success === 'updated'): ?>

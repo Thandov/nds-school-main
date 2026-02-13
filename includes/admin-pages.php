@@ -618,35 +618,36 @@ function nds_edit_program_page()
     }
 }
 
-// Modern Courses Page with Tailwind CSS
+// Modern Qualifications Page with Tailwind CSS
 function nds_courses_page()
 {
-    // Load the modern courses page
+    // Load the modern qualifications page
     if (file_exists(plugin_dir_path(__FILE__) . 'courses-tailwind.php')) {
         require_once plugin_dir_path(__FILE__) . 'courses-tailwind.php';
         nds_courses_page_tailwind();
     } else {
         // Fallback to basic implementation
     if (isset($_GET['delete_course'])) {
-        // Call the delete function (ensure it's defined and included somewhere)
+        // Call the delete function
         nds_delete_course($_GET);
     }
 
     global $wpdb;
-    $courses_table = $wpdb->prefix . "nds_courses"; // Updated table name
-    $program_table = $wpdb->prefix . "nds_program_types"; // Updated table name
+    $courses_table = $wpdb->prefix . "nds_courses";
+    $programs_table = $wpdb->prefix . "nds_programs";
 
-    // Fetch all courses
+    // Fetch all qualifications (using join to get program name)
     $courses = $wpdb->get_results("
-    SELECT c.*, p.id AS program_id, p.name AS program_name, p.faculty_id, p.category_id AS program_category_id, p.description AS program_description
-    FROM $courses_table AS c
-    INNER JOIN $program_table AS p ON c.program_id = p.id", ARRAY_A);
+        SELECT c.*, p.id AS program_id, p.name AS program_name, p.faculty_id
+        FROM $courses_table AS c
+        INNER JOIN $programs_table AS p ON c.program_id = p.id
+    ", ARRAY_A);
     ?>
     <div class="wrap">
-        <h1 class="wp-heading-inline text-2xl font-semibold">Courses</h1>
+        <h1 class="wp-heading-inline text-2xl font-semibold">Qualifications</h1>
         <a href="<?php echo admin_url('admin.php?page=nds-add-course'); ?>"
             class="page-title-action bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition">Add New
-            Course</a>
+            Qualification</a>
         <hr class="wp-header-end my-4">
         <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <?php foreach ($courses as $course):
@@ -654,13 +655,13 @@ function nds_courses_page()
             endforeach; ?>
         </div>
     </div>
-<?php
+    <?php
     }
 }
 
-// Course Overview Page
+// Qualification Overview Page
 function nds_course_overview_page() {
-    // Load the course overview page
+    // Load the qualification overview page
     require_once plugin_dir_path(__FILE__) . 'course-overview.php';
     nds_course_overview_page_content();
 }
@@ -707,19 +708,19 @@ function course_form($typ, $course = null, $program_id = null, $url = null, $mod
         <input type="hidden" name="code" value="null">
         <input type="hidden" name="currency" value="ZAR" />
         <fieldset class="space-y-4">
-            <legend class="text-lg font-semibold text-gray-700">Course Details</legend>
+            <legend class="text-lg font-semibold text-gray-700">Qualification Details</legend>
             <hr>
             <div class="grid grid-cols-2 gap-6">
                 <div class="flex flex-col justify-evenly space-y-4">
                     <div class="flex flex-col">
-                        <label for="name" class="text-sm font-medium text-gray-700">Course Name:</label>
-                        <input type="text" name="name" placeholder="Course Name"
+                        <label for="name" class="text-sm font-medium text-gray-700">Qualification Name:</label>
+                        <input type="text" name="name" placeholder="Qualification Name"
                             value="<?php echo isset($course) && isset($course->name) ? esc_attr($course->name) : ''; ?>" required
                             class="mt-1 p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
                     </div>
                     <div class="flex flex-col">
                         <label for="description" class="text-sm font-medium text-gray-700">Description:</label>
-                        <textarea name="description" placeholder="Course Description" rows="4"
+                        <textarea name="description" placeholder="Qualification Description" rows="4"
                             class="mt-1 p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"><?php echo isset($course) && isset($course->description) ? esc_textarea($course->description) : ''; ?></textarea>
                     </div>
                 </div>
@@ -752,7 +753,7 @@ function course_form($typ, $course = null, $program_id = null, $url = null, $mod
                                     <option value="">Select Program</option>
                                     <?php
                                     global $wpdb;
-                                    $programs_table = $wpdb->prefix . "nds_program_types";
+                                    $programs_table = $wpdb->prefix . "nds_programs";
                                     $programs = $wpdb->get_results("SELECT id, name FROM $programs_table");
 
                                     foreach ($programs as $program) {
@@ -767,7 +768,7 @@ function course_form($typ, $course = null, $program_id = null, $url = null, $mod
                             <input type="hidden" name="program_id" value="<?php echo $program_id; ?>">
                         <?php endif; ?>
                         <div class="flex flex-col">
-                            <label for="duration" class="text-sm font-medium text-gray-700">Course Duration:</label>
+                            <label for="duration" class="text-sm font-medium text-gray-700">Qualification Duration:</label>
                             <select id="duration" name="duration" required
                                 class="mt-1 p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
                                 <?php 
@@ -827,14 +828,14 @@ function course_form($typ, $course = null, $program_id = null, $url = null, $mod
 
 
             <fieldset class="space-y-4">
-                <legend class="text-lg font-semibold text-gray-700">Course Cost</legend>
+                <legend class="text-lg font-semibold text-gray-700">Qualification Cost</legend>
                 <hr>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
 
                     <div class="flex flex-col">
 
-                        <label for="price" class="text-sm font-medium text-gray-700">Course Price:</label>
-                        <input type="number" name="price" placeholder="Course Price"
+                        <label for="price" class="text-sm font-medium text-gray-700">Qualification Price:</label>
+                        <input type="number" name="price" placeholder="Qualification Price"
                             value="<?php echo isset($course) && isset($course->price) ? esc_attr($course->price) : ''; ?>" required
                             class="mt-1 p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
                     </div>
@@ -878,7 +879,7 @@ function course_form($typ, $course = null, $program_id = null, $url = null, $mod
 
         <!-- Schedule / Timetable Section -->
         <fieldset class="space-y-4 mt-6">
-            <legend class="text-lg font-semibold text-gray-700">Course Schedule / Timetable</legend>
+            <legend class="text-lg font-semibold text-gray-700">Qualification Schedule / Timetable</legend>
             <hr>
             <?php
             // Get staff/lecturers for schedule assignment
@@ -908,7 +909,7 @@ function course_form($typ, $course = null, $program_id = null, $url = null, $mod
                 ", ARRAY_A);
             }
             
-            // Get first lecturer associated with this course
+            // Get first lecturer associated with this qualification
             $first_lecturer_id = null;
             if (isset($course) && isset($course->id)) {
                 $first_lecturer = $wpdb->get_row($wpdb->prepare("
@@ -940,7 +941,7 @@ function course_form($typ, $course = null, $program_id = null, $url = null, $mod
         <div class="flex justify-end">
             <input type="submit" name="submit_<?php echo $typ; ?>_course"
                 class="px-6 py-3 bg-blue-500 text-white rounded-md shadow-md hover:bg-blue-600 focus:outline-none"
-                value="<?php echo ucwords($typ); ?> Course" />
+                value="<?php echo ucwords($typ); ?> Qualification" />
             <input type="hidden" name="action" value="nds_<?php echo $typ; ?>_course" />
         </div>
     <?php if (!$modal): ?>
@@ -959,7 +960,7 @@ function nds_add_courses_page()
     //$program_id = ($_GET['faculty_id'])? $_GET['faculty_id'] : '';
 ?>
     <div class="wrap">
-        <h1 class="wp-heading-inline">Add Course</h1>
+        <h1 class="wp-heading-inline">Add Qualification</h1>
         <form method="POST" action="<?php echo admin_url('admin-post.php'); ?>">
             <?php
             wp_nonce_field('nds_add_course_nonce', 'nds_add_nonce');
@@ -1005,7 +1006,7 @@ function nds_edit_courses_page()
         $breadlinks_json = urlencode(json_encode($breadlinks));
 
         if ($course): ?>
-            <div class="nds-tailwind-wrapper bg-gray-50 min-h-screen" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 2rem;">
+            <div class="nds-tailwind-wrapper bg-gray-50 pb-12" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 2rem; margin-left: -20px; padding-left: 20px; margin-top: -20px;">
                 <!-- Header Section -->
                 <div class="bg-white shadow-sm border-b border-gray-200 mb-6 rounded-lg">
                     <div class="max-w-7xl mx-auto px-6 py-6">
@@ -1015,8 +1016,8 @@ function nds_edit_courses_page()
                                     <i class="fas fa-book text-white text-xl"></i>
                                 </div>
                                 <div>
-                                    <h1 class="text-3xl font-bold text-gray-900 mb-1">Edit Course</h1>
-                                    <p class="text-gray-600 text-sm">Update course information and settings</p>
+                                    <h1 class="text-3xl font-bold text-gray-900 mb-1">Edit Qualification</h1>
+                                    <p class="text-gray-600 text-sm">Update qualification information and settings</p>
                                 </div>
                             </div>
                             <div class="flex items-center space-x-3">
@@ -1053,7 +1054,7 @@ function nds_edit_courses_page()
                     if (success === 'updated') {
                         if (window.Toastify) {
                             Toastify({
-                                text: 'Course updated successfully!',
+                                text: 'Qualification updated successfully!',
                                 backgroundColor: '#10b981',
                                 duration: 3000,
                                 gravity: 'top',
@@ -1080,8 +1081,6 @@ function nds_edit_courses_page()
     endif;
 }
 
-
-// duplicate nds_edit_staff_page removed
 
 // Modern Recipes Page
 function nds_recipes_dashboard() {
@@ -1340,11 +1339,6 @@ function nds_add_student_page() {
         wp_die('Unauthorized');
     }
     
-    // Handle form submission
-    if (isset($_POST['submit_student'])) {
-        nds_add_student();
-    }
-    
     nds_student_form('add', null);
 }
 
@@ -1362,11 +1356,6 @@ function nds_edit_student_page() {
     $student = nds_get_student($student_id);
     if (!$student) {
         wp_die('Student not found');
-    }
-    
-    // Handle form submission
-    if (isset($_POST['submit_student'])) {
-        nds_update_student($student_id);
     }
     
     nds_student_form('edit', $student);
@@ -1488,14 +1477,55 @@ function nds_student_form($action, $student = null) {
     $student_data = $student ? (array) $student : [];
     ?>
     
-    <div class="wrap">
-        <h1 class="wp-heading-inline"><?php echo $is_edit ? 'Edit Student' : 'Add New Student'; ?> <span id="step-indicator" class="text-gray-500 text-lg font-normal">- Step 1 of 4</span></h1>
-        <?php if (!$is_edit): ?>
-            <a href="<?php echo admin_url('admin-post.php?action=nds_seed_students&count=10'); ?>" class="page-title-action" style="margin-left:8px">Seed 10 Students</a>
-        <?php endif; ?>
+    <div class="wrap" style="margin:0; padding:0; background:#f9fafb; min-height:100vh; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <!-- Header matching Student Management -->
+        <div class="bg-white shadow-sm border-b border-gray-200">
+            <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center py-6">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-12 h-12 bg-green-600 rounded-xl flex items-center justify-center shadow-lg">
+                            <i class="fas fa-user-plus text-white text-2xl"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-3xl font-bold text-gray-900" style="margin:0; padding:0;">
+                                <?php echo $is_edit ? 'Edit Student' : 'Add New Student'; ?>
+                            </h1>
+                            <p class="text-sm text-gray-600 mt-1" style="margin:0.25rem 0 0 0;">
+                                <?php echo $is_edit ? 'Update student information' : 'Fill in the details to register a new student'; ?>
+                                <span id="step-indicator">— Step 1 of 4</span>
+                            </p>
+                        </div>
+                    </div>
+                    <a href="<?php echo admin_url('admin.php?page=nds-all-learners'); ?>" 
+                       class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2.5 px-5 rounded-lg flex items-center gap-2 transition-all duration-200 border border-gray-300"
+                       style="text-decoration:none;">
+                        <i class="fas fa-arrow-left"></i>
+                        Back to Students
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Breadcrumb Navigation -->
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-4">
+            <nav class="flex items-center space-x-2 text-sm text-gray-600">
+                <a href="<?php echo admin_url('admin.php?page=nds-academy'); ?>" class="hover:text-green-600 transition-colors flex items-center">
+                    <i class="fas fa-home mr-1"></i>NDS Academy
+                </a>
+                <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+                <a href="<?php echo admin_url('admin.php?page=nds-all-learners'); ?>" class="hover:text-green-600 transition-colors">Student Management</a>
+                <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+                <span class="text-gray-900 font-medium"><?php echo $is_edit ? 'Edit Student' : 'Add New Student'; ?></span>
+            </nav>
+        </div>
         
-        <form method="POST" id="student-multistep-form" class="mt-6 max-w-4xl" onsubmit="return validateFinalStep()">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+        <form method="POST" action="<?php echo admin_url('admin-post.php'); ?>" id="student-multistep-form" onsubmit="return validateFinalStep()">
             <?php wp_nonce_field('nds_' . $action . '_student_nonce_action', 'nds_' . $action . '_student_nonce'); ?>
+            <input type="hidden" name="action" value="nds_<?php echo $action; ?>_student">
+            <?php if ($is_edit && isset($student_data['id'])): ?>
+                <input type="hidden" name="student_id" value="<?php echo intval($student_data['id']); ?>">
+            <?php endif; ?>
             <input type="hidden" name="source" value="admin">
             
             <!-- Progress Indicator -->
@@ -1504,7 +1534,7 @@ function nds_student_form($action, $student = null) {
                     <div class="flex items-center space-x-4 flex-1">
                         <!-- Step 1 -->
                         <div class="flex items-center">
-                            <div id="step-1-indicator" class="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-semibold transition-all">1</div>
+                            <div id="step-1-indicator" class="w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center font-semibold transition-all">1</div>
                             <span class="ml-2 text-sm font-medium text-gray-700">Personal Info</span>
                         </div>
                         <div class="flex-1 h-1 bg-gray-200 rounded">
@@ -1593,9 +1623,26 @@ function nds_student_form($action, $student = null) {
                     </div>
                 </div>
                 
-                <div class="mt-6">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                    <textarea name="address" rows="3" class="w-full border border-gray-300 rounded-md px-3 py-2"><?php echo esc_textarea($student_data['address'] ?? ''); ?></textarea>
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                        <textarea name="address" rows="3" class="w-full border border-gray-300 rounded-md px-3 py-2"><?php echo esc_textarea($student_data['address'] ?? ''); ?></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Province</label>
+                        <select name="province" id="student_province" class="w-full border border-gray-300 rounded-md px-3 py-2" onchange="updateCohort()">
+                            <option value="">Select Province</option>
+                            <option value="EC" <?php selected($student_data['province'] ?? '', 'EC'); ?>>Eastern Cape</option>
+                            <option value="FS" <?php selected($student_data['province'] ?? '', 'FS'); ?>>Free State</option>
+                            <option value="GP" <?php selected($student_data['province'] ?? '', 'GP'); ?>>Gauteng</option>
+                            <option value="KZN" <?php selected($student_data['province'] ?? '', 'KZN'); ?>>KwaZulu-Natal</option>
+                            <option value="LP" <?php selected($student_data['province'] ?? '', 'LP'); ?>>Limpopo</option>
+                            <option value="MP" <?php selected($student_data['province'] ?? '', 'MP'); ?>>Mpumalanga</option>
+                            <option value="NC" <?php selected($student_data['province'] ?? '', 'NC'); ?>>Northern Cape</option>
+                            <option value="NW" <?php selected($student_data['province'] ?? '', 'NW'); ?>>North West</option>
+                            <option value="WC" <?php selected($student_data['province'] ?? '', 'WC'); ?>>Western Cape</option>
+                        </select>
+                    </div>
                 </div>
                 
                 <div class="mt-6">
@@ -1610,8 +1657,8 @@ function nds_student_form($action, $student = null) {
                         <?php KIT_Commons::FacultySelect('faculty_id', intval($student_data['faculty_id'] ?? 0), '', true, 'Unassigned', 'loadCourses()'); ?>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Course</label>
-                        <select name="course_id" id="course_id" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Qualification</label>
+                        <select name="program_id" id="program_id" class="w-full border border-gray-300 rounded-md px-3 py-2">
                             <option value="">Select Faculty First</option>
                         </select>
                     </div>
@@ -1667,6 +1714,11 @@ function nds_student_form($action, $student = null) {
                         <label class="block text-sm font-medium text-gray-700 mb-1">Highest Qualification</label>
                         <input type="text" name="highest_qualification" value="<?php echo esc_attr($student_data['highest_qualification'] ?? ''); ?>" 
                                class="w-full border border-gray-300 rounded-md px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Provincial Cohort (Auto-generated)</label>
+                        <input type="text" name="cohort" id="cohort_display" value="<?php echo esc_attr($student_data['cohort'] ?? ''); ?>" 
+                               readonly class="w-full border border-gray-200 bg-gray-50 rounded-md px-3 py-2 text-gray-500 font-mono">
                     </div>
                 </div>
             </div>
@@ -1753,12 +1805,12 @@ function nds_student_form($action, $student = null) {
                         Previous
                     </button>
                     <button type="button" id="next-btn" onclick="handleNext()" 
-                            class="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium">
+                            class="inline-flex items-center px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium">
                         Next
                         <span class="dashicons dashicons-arrow-right-alt2 ml-1 text-base"></span>
                     </button>
                     <button type="submit" id="submit-btn" name="submit_student" 
-                            class="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium" 
+                            class="inline-flex items-center px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium" 
                             style="display: none;">
                         <span class="dashicons dashicons-yes-alt mr-1 text-base"></span>
                         <?php echo $is_edit ? 'Update Student' : 'Add Student'; ?>
@@ -1793,7 +1845,7 @@ function nds_student_form($action, $student = null) {
             // Update step indicator text
             const stepIndicator = document.getElementById('step-indicator');
             if (stepIndicator) {
-                stepIndicator.textContent = '- Step ' + step + ' of ' + totalSteps;
+                stepIndicator.textContent = '— Step ' + step + ' of ' + totalSteps;
             }
             
             // Update navigation buttons
@@ -1816,7 +1868,7 @@ function nds_student_form($action, $student = null) {
                         indicator.innerHTML = '<span class="dashicons dashicons-yes-alt text-sm"></span>';
                     } else if (i === step) {
                         // Current step
-                        indicator.className = 'w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-semibold transition-all';
+                        indicator.className = 'w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center font-semibold transition-all';
                         indicator.textContent = i;
                     } else {
                         // Future step
@@ -1949,52 +2001,69 @@ function nds_student_form($action, $student = null) {
             return true;
         }
         
-        // Preserve existing loadCourses function
         function loadCourses() {
             const facultyId = document.getElementById('faculty_id').value;
-            const courseSelect = document.getElementById('course_id');
+            const programSelect = document.getElementById('program_id');
             
             // Clear current options
-            courseSelect.innerHTML = '<option value="">Loading courses...</option>';
+            programSelect.innerHTML = '<option value="">Loading...</option>';
             
             if (!facultyId) {
-                courseSelect.innerHTML = '<option value="">Select Faculty First</option>';
+                programSelect.innerHTML = '<option value="">Select Faculty First</option>';
                 return;
             }
             
-            // Make AJAX request to get courses for this faculty
             fetch('<?php echo admin_url('admin-ajax.php'); ?>', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
-                body: 'action=nds_get_courses_by_faculty&faculty_id=' + facultyId + '&nonce=<?php echo wp_create_nonce('nds_get_courses_nonce'); ?>'
+                body: 'action=nds_get_programs_by_faculty&faculty_id=' + facultyId + '&nonce=<?php echo wp_create_nonce('nds_get_courses_nonce'); ?>'
             })
             .then(response => response.json())
             .then(data => {
-                courseSelect.innerHTML = '<option value="">Select Course</option>';
+                programSelect.innerHTML = '<option value="">Select Qualification</option>';
                 if (data.success && data.data) {
-                    data.data.forEach(course => {
+                    data.data.forEach(program => {
                         const option = document.createElement('option');
-                        option.value = course.id;
-                        option.textContent = course.name;
-                        courseSelect.appendChild(option);
+                        option.value = program.id;
+                        option.textContent = program.name;
+                        programSelect.appendChild(option);
                     });
                     
-                    // Preserve selected course if editing
-                    <?php if ($is_edit && isset($student_data['course_id'])): ?>
-                    const selectedCourseId = <?php echo intval($student_data['course_id'] ?? 0); ?>;
-                    if (selectedCourseId) {
-                        courseSelect.value = selectedCourseId;
+                    // Preserve selected program if editing
+                    <?php if ($is_edit && isset($student_data['program_id'])): ?>
+                    const selectedProgramId = <?php echo intval($student_data['program_id'] ?? 0); ?>;
+                    if (selectedProgramId) {
+                        programSelect.value = selectedProgramId;
                     }
                     <?php endif; ?>
                 }
             })
             .catch(error => {
-                console.error('Error loading courses:', error);
-                courseSelect.innerHTML = '<option value="">Error loading courses</option>';
+                console.error('Error loading programs:', error);
+                programSelect.innerHTML = '<option value="">Error loading</option>';
             });
         }
+
+        function updateCohort() {
+            const province = document.getElementById('student_province').value;
+            const cohortField = document.getElementById('cohort_display');
+            if (!province) {
+                cohortField.value = '';
+                return;
+            }
+            const year = new Date().getFullYear();
+            const random = Math.floor(1000 + Math.random() * 9000);
+            cohortField.value = `${province}-${year}-${random}`;
+        }
+
+        // Initialize on load if needed
+        document.addEventListener('DOMContentLoaded', function() {
+            if (document.getElementById('faculty_id')?.value) {
+                loadCourses();
+            }
+        });
         
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -2008,6 +2077,7 @@ function nds_student_form($action, $student = null) {
             }
         });
         </script>
+        </div><!-- close max-width container -->
     </div>
     <?php
 }
@@ -3553,23 +3623,35 @@ function nds_handle_export_database() {
 
     $plugin_root = dirname(plugin_dir_path(__FILE__));
     $export_script = $plugin_root . '/export-database-to-excel.php';
+    
+    // FIX: Add proper error handling and validation
     if (!file_exists($export_script)) {
-        wp_redirect(admin_url('admin.php?page=nds-settings&import_export=error&msg=' . rawurlencode('Export script not found.')));
+        error_log('[NDS Export] Script not found: ' . $export_script);
+        wp_safe_redirect(admin_url('admin.php?page=nds-settings&import_export=error&msg=' . rawurlencode('Export script not found.')));
+        exit;
+    }
+
+    // FIX: Ensure the function exists
+    require_once $export_script;
+    if (!function_exists('nds_run_export_to_directory')) {
+        error_log('[NDS Export] Function nds_run_export_to_directory not found');
+        wp_safe_redirect(admin_url('admin.php?page=nds-settings&import_export=error&msg=' . rawurlencode('Export function not available.')));
         exit;
     }
 
     $temp_dir = sys_get_temp_dir() . '/nds-export-' . time();
-    require_once $export_script;
     $out_dir = nds_run_export_to_directory($temp_dir, true);
+    
     if (!$out_dir || !is_dir($out_dir)) {
-        wp_redirect(admin_url('admin.php?page=nds-settings&import_export=error&msg=' . rawurlencode('Export failed.')));
+        wp_safe_redirect(admin_url('admin.php?page=nds-settings&import_export=error&msg=' . rawurlencode('Export failed.')));
         exit;
     }
 
     $zip_path = sys_get_temp_dir() . '/nds-database-export-' . date('Y-m-d-His') . '.zip';
     $zip = new ZipArchive();
+    
     if ($zip->open($zip_path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-        wp_redirect(admin_url('admin.php?page=nds-settings&import_export=error&msg=' . rawurlencode('Could not create ZIP.')));
+        wp_safe_redirect(admin_url('admin.php?page=nds-settings&import_export=error&msg=' . rawurlencode('Could not create ZIP.')));
         exit;
     }
     $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($out_dir, RecursiveDirectoryIterator::SKIP_DOTS), RecursiveIteratorIterator::LEAVES_ONLY);
@@ -3584,12 +3666,22 @@ function nds_handle_export_database() {
     array_map('unlink', glob($out_dir . '/*'));
     @rmdir($out_dir);
 
-    header('Content-Type: application/zip');
-    header('Content-Disposition: attachment; filename="nds-database-export-' . date('Y-m-d') . '.zip"');
-    header('Content-Length: ' . filesize($zip_path));
-    readfile($zip_path);
-    @unlink($zip_path);
-    exit;
+    // FIX: Ensure proper headers and exit
+    if (file_exists($zip_path)) {
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="nds-database-export-' . date('Y-m-d') . '.zip"');
+        header('Content-Length: ' . filesize($zip_path));
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+        readfile($zip_path);
+        @unlink($zip_path);
+        exit;
+    } else {
+        error_log('[NDS Export] ZIP file not created: ' . $zip_path);
+        wp_safe_redirect(admin_url('admin.php?page=nds-settings&import_export=error&msg=' . rawurlencode('Export file could not be created.')));
+        exit;
+    }
 }
 
 // Import from Excel - NDS Academy Settings
@@ -3642,14 +3734,16 @@ function nds_handle_import_excel() {
             $msg = 'No Excel file selected and default file not found (assets/NDS Database System.xlsx). Please select an .xlsx file or add the default file to the plugin assets folder.';
         }
         error_log('[NDS Import] ' . $msg);
-        wp_redirect(admin_url('admin.php?page=nds-settings&import_export=error&msg=' . rawurlencode($msg)));
+        
+        // FIX: Use wp_safe_redirect instead of wp_redirect and ensure exit
+        wp_safe_redirect(admin_url('admin.php?page=nds-settings&import_export=error&msg=' . rawurlencode($msg)));
         exit;
     }
 
     $import_script = $plugin_root . '/import-excel-to-database.php';
     if (!file_exists($import_script)) {
         error_log('[NDS Import] Script not found: ' . $import_script);
-        wp_redirect(admin_url('admin.php?page=nds-settings&import_export=error&msg=' . rawurlencode('Import script not found.')));
+        wp_safe_redirect(admin_url('admin.php?page=nds-settings&import_export=error&msg=' . rawurlencode('Import script not found.')));
         exit;
     }
 
@@ -3657,11 +3751,18 @@ function nds_handle_import_excel() {
 
     try {
         require_once $import_script;
+        
+        // FIX: Ensure the function exists before calling it
+        if (!function_exists('nds_import_excel_run')) {
+            error_log('[NDS Import] Function nds_import_excel_run not found in import script');
+            wp_safe_redirect(admin_url('admin.php?page=nds-settings&import_export=error&msg=' . rawurlencode('Import function not available.')));
+            exit;
+        }
         $result = nds_import_excel_run($use_path, array('dry_run' => false));
     } catch (Exception $e) {
         $agent_log('H5', 'Exception in import', ['message' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
         error_log('[NDS Import] Exception: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
-        wp_redirect(admin_url('admin.php?page=nds-settings&import_export=error&msg=' . rawurlencode('Import error: ' . $e->getMessage())));
+        wp_safe_redirect(admin_url('admin.php?page=nds-settings&import_export=error&msg=' . rawurlencode('Import error: ' . $e->getMessage())));
         exit;
     }
 
@@ -3676,16 +3777,36 @@ function nds_handle_import_excel() {
         if (!empty($result['skipped_details'])) {
             set_transient('nds_import_skipped_details', $result['skipped_details'], 120);
         }
-        wp_redirect(admin_url('admin.php?page=nds-settings&import_export=success&msg=' . rawurlencode($msg)));
+        wp_safe_redirect(admin_url('admin.php?page=nds-settings&import_export=success&msg=' . rawurlencode($msg)));
+        exit;
     } else {
         $msg = isset($result['message']) ? $result['message'] : 'Import failed.';
         if (!empty($result['errors'])) {
             error_log('[NDS Import] Errors: ' . implode(' | ', array_slice($result['errors'], 0, 10)));
         }
-        wp_redirect(admin_url('admin.php?page=nds-settings&import_export=error&msg=' . rawurlencode($msg)));
+        wp_safe_redirect(admin_url('admin.php?page=nds-settings&import_export=error&msg=' . rawurlencode($msg)));
+        exit;
     }
-    exit;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // AJAX Handlers for Programs Management
 add_action('wp_ajax_nds_create_program_ajax', 'nds_create_program_ajax_handler');

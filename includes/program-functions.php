@@ -486,35 +486,39 @@ function nds_update_program()
 add_action('admin_post_nds_update_program', 'nds_update_program');
 
 
-// Delete a Program
 function nds_delete_program($id)
 {
     global $wpdb;
-    // Query to fetch the program details by ID
-    $query = $wpdb->prepare(
-        "SELECT * FROM {$wpdb->prefix}nds_program_types WHERE id = %d",
-        $id
-    );
     $programs_table = $wpdb->prefix . 'nds_programs';
 
+    // Query to fetch the program details by ID
+    $query = $wpdb->prepare(
+        "SELECT * FROM {$programs_table} WHERE id = %d",
+        $id
+    );
+    $program = $wpdb->get_row($query);
 
-    $program =  $wpdb->get_row($query);
-    $category = get_term_by('name', $program->name, 'category', OBJECT, 'slug');
+    if ($program) {
+        // If there's an associated category, delete it
+        if (!empty($program->name)) {
+            $category = get_term_by('name', $program->name, 'category', OBJECT, 'slug');
+            if ($category) {
+                wp_delete_term($category->term_id, 'category');
+            }
+        }
 
-    $deletedCategoryResult = wp_delete_term($category->term_id, 'category');
-    if (is_wp_error($deletedCategoryResult)) {
-        echo 'Error deleting category: ' . $deletedCategoryResult->get_error_message();
-    } else {
-        $deleted =  $wpdb->delete($programs_table, ['id' => intval($id)], ['%d']);
+        $deleted = $wpdb->delete($programs_table, ['id' => intval($id)], ['%d']);
         if ($deleted) {
             // Get faculty_id from the deleted program
-            $faculty_id = $wpdb->get_var($wpdb->prepare("SELECT faculty_id FROM {$programs_table} WHERE id = %d", $id));
+            $faculty_id = $program->faculty_id;
             $rayray = array('faculty_id' => $faculty_id);
             redd("?page=nds-programs", $rayray);
             exit;
         } else {
             return "Sorry Boss!!!";
         }
+    } else {
+        return "Program not found.";
     }
 }
 function program_form($act, $pathID, $program = null)
@@ -728,9 +732,10 @@ add_shortcode('nds_programs_table', 'nds_display_programs_table');
 function nds_get_program_by_id($program_id)
 {
     global $wpdb;
+    $programs_table = $wpdb->prefix . 'nds_programs';
     // Query to fetch the program details by ID
     $query = $wpdb->prepare(
-        "SELECT * FROM {$wpdb->prefix}nds_program_types WHERE id = %d",
+        "SELECT * FROM {$programs_table} WHERE id = %d",
         $program_id
     );
     // Fetch the result and return it

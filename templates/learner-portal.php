@@ -10,49 +10,6 @@ if (!defined('ABSPATH')) {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?php echo esc_html(get_bloginfo('name')); ?> — Student Portal</title>
     <?php wp_head(); ?>
-    <style>
-        html, body {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-        }
-        body.nds-portal-body {
-            margin: 0;
-            padding: 0;
-        }
-        
-        /* Hide website header/navbar completely on portal */
-        body.nds-portal-body header,
-        body.nds-portal-body .site-header,
-        body.nds-portal-body .main-header,
-        body.nds-portal-body nav.site-navigation,
-        body.nds-portal-body #site-header,
-        body.nds-portal-body #masthead,
-        body.nds-portal-body .ast-primary-header-bar,
-        body.nds-portal-body .site-navigation,
-        body.nds-portal-body #header,
-        body.nds-portal-body .header {
-            display: none !important;
-            height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: hidden !important;
-        }
-        
-        /* Remove gap - use margin instead of top */
-        .nds-portal-offset {
-            margin-top: 0 !important;
-            padding-top: 0 !important;
-        }
-        body.admin-bar .nds-portal-offset { 
-            margin-top: 32px !important; 
-        }
-        @media screen and (max-width: 782px) {
-            body.admin-bar .nds-portal-offset { 
-                margin-top: 46px !important; 
-            }
-        }
-    </style>
 </head>
 <body <?php body_class('nds-portal-body'); ?>>
 <?php function_exists('wp_body_open') && wp_body_open(); ?>
@@ -62,19 +19,39 @@ global $wpdb;
 
 // Resolve current learner from logged-in user
 $student_id = (int) nds_portal_get_current_student_id();
+
+// Allow administrators to override student_id via query parameter to view any student's portal
+if (current_user_can('manage_options') && isset($_GET['student_id'])) {
+    $student_id = intval($_GET['student_id']);
+}
+
 if ($student_id <= 0) {
-    echo '<div class="nds-tailwind-wrapper bg-gray-50 py-16"><div class="max-w-3xl mx-auto bg-white shadow-sm rounded-xl p-8 text-center text-gray-700">We could not find a learner profile linked to your account. Please contact the school.</div></div>';
-    return;
-}
+    if (current_user_can('manage_options')) {
+        // Admin viewing their own (empty) portal or just landing here
+        $full_name = 'Administrator';
+        $learner_data = [];
+        $enrollments = [];
+        $status = 'admin';
+        $is_applicant = false;
+        $has_no_enrollments = true;
+    } else {
+        echo '<div class="nds-tailwind-wrapper bg-gray-50 py-16"><div class="max-w-3xl mx-auto bg-white shadow-sm rounded-xl p-8 text-center text-gray-700">We could not find a learner profile linked to your account. Please contact the school.</div></div>';
+        return;
+    }
+} else {
+    $learner = nds_get_student($student_id);
+    if (!$learner) {
+        if (current_user_can('manage_options')) {
+            echo '<div class="nds-tailwind-wrapper bg-gray-50 py-16"><div class="max-w-3xl mx-auto bg-white shadow-sm rounded-xl p-8 text-center text-gray-700">Learner with ID ' . $student_id . ' not found.</div></div>';
+            return;
+        }
+        echo '<div class="nds-tailwind-wrapper bg-gray-50 py-16"><div class="max-w-3xl mx-auto bg-white shadow-sm rounded-xl p-8 text-center text-gray-700">Your learner profile could not be loaded. Please contact the school.</div></div>';
+        return;
+    }
 
-$learner   = nds_get_student($student_id);
-if (!$learner) {
-    echo '<div class="nds-tailwind-wrapper bg-gray-50 py-16"><div class="max-w-3xl mx-auto bg-white shadow-sm rounded-xl p-8 text-center text-gray-700">Your learner profile could not be loaded. Please contact the school.</div></div>';
-    return;
+    $learner_data = (array) $learner;
+    $full_name    = trim(($learner_data['first_name'] ?? '') . ' ' . ($learner_data['last_name'] ?? ''));
 }
-
-$learner_data = (array) $learner;
-$full_name    = trim(($learner_data['first_name'] ?? '') . ' ' . ($learner_data['last_name'] ?? ''));
 
 // Enrollments (used for multiple sections)
 $enrollments = $wpdb->get_results(
@@ -181,6 +158,10 @@ function nds_learner_portal_tab_url($tab)
     }
     return add_query_arg('tab', $tab, $base);
 }
+
+// Fetch unread notifications for current student
+$unread_notifications = nds_get_unread_notifications($student_id);
+$unread_count = count($unread_notifications);
 ?>
 
 <div class="nds-tailwind-wrapper bg-gray-50 min-h-screen nds-portal-offset" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
@@ -259,6 +240,26 @@ function nds_learner_portal_tab_url($tab)
         </div>
     <?php endif; ?>
     <!-- Header -->
+    <?php if (current_user_can('manage_options')) : ?>
+        <div class="bg-amber-50 border-b border-amber-200 py-2 px-4 shadow-sm relative z-50">
+            <div class="max-w-7xl mx-auto flex items-center justify-between text-amber-800 text-sm font-medium">
+                <div class="flex items-center">
+                    <i class="fas fa-user-shield mr-2"></i>
+                    <span>Viewing as Administrator</span>
+                    <?php if ($student_id > 0 && !empty($learner_data)): ?>
+                        <span class="mx-2">•</span>
+                        <span>Viewing profile: <strong><?php echo esc_html($full_name); ?></strong> (ID: <?php echo $student_id; ?>)</span>
+                    <?php endif; ?>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="<?php echo admin_url('admin.php?page=nds-all-learners'); ?>" class="hover:underline">
+                        Return to Admin Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
+
     <div class="bg-white shadow-sm border-b border-gray-200">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center py-6">
@@ -281,6 +282,86 @@ function nds_learner_portal_tab_url($tab)
                     </div>
                 </div>
                 <div class="flex items-center space-x-3">
+                    <!-- Notification Bell -->
+                    <div class="relative mr-2" id="nds-notification-wrapper">
+                        <button id="nds-notification-bell" class="relative p-2.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-300 group">
+                            <i class="fas fa-bell text-xl"></i>
+                            <?php if ($unread_count > 0) : ?>
+                                <span id="nds-notification-badge" class="absolute top-0 right-0 flex h-4 w-4 translate-x-1/3 -translate-y-1/3">
+                                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                    <span class="relative inline-flex items-center justify-center rounded-full h-4 w-4 bg-red-600 text-[9px] font-bold text-white shadow-sm ring-1 ring-white">
+                                        <?php echo $unread_count; ?>
+                                    </span>
+                                </span>
+                            <?php endif; ?>
+                        </button>
+
+                        <!-- Notification Dropdown -->
+                        <div id="nds-notification-dropdown" class="hidden absolute right-0 mt-3 w-85 sm:w-96 bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-gray-100 z-[100] transform origin-top-right transition-all duration-300">
+                            <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 rounded-t-2xl">
+                                <div>
+                                    <h3 class="text-base font-bold text-gray-900">Notifications</h3>
+                                    <?php if ($unread_count > 0) : ?>
+                                        <p class="text-xs text-gray-500 mt-0.5">You have <?php echo $unread_count; ?> unread messages</p>
+                                    <?php endif; ?>
+                                </div>
+                                <?php if ($unread_count > 0) : ?>
+                                    <button id="nds-mark-all-read" class="text-xs text-blue-600 hover:text-blue-700 font-bold px-3 py-1.5 bg-blue-50 rounded-lg transition-colors">Mark all read</button>
+                                <?php endif; ?>
+                            </div>
+
+                            <div class="max-h-[400px] overflow-y-auto" id="nds-notification-list">
+                                <?php if ($unread_count > 0) : ?>
+                                    <?php foreach ($unread_notifications as $notif) : 
+                                        $icon = 'fa-info-circle text-blue-500 bg-blue-50';
+                                        if ($notif['type'] === 'timetable' || $notif['type'] === 'calendar') {
+                                            $icon = 'fa-calendar-alt text-indigo-500 bg-indigo-50';
+                                        } elseif ($notif['type'] === 'warning') {
+                                            $icon = 'fa-exclamation-triangle text-amber-500 bg-amber-50';
+                                        } elseif ($notif['type'] === 'success') {
+                                            $icon = 'fa-check-circle text-emerald-500 bg-emerald-50';
+                                        } elseif ($notif['type'] === 'error') {
+                                            $icon = 'fa-times-circle text-rose-500 bg-rose-50';
+                                        }
+                                    ?>
+                                        <div class="p-5 border-b border-gray-50 hover:bg-blue-50/30 transition-all relative group cursor-pointer" data-id="<?php echo $notif['id']; ?>">
+                                            <div class="flex items-start gap-4">
+                                                <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 <?php echo $icon; ?> group-hover:scale-110 transition-transform duration-300 shadow-sm">
+                                                    <i class="fas <?php echo explode(' ', $icon)[0]; ?> text-lg"></i>
+                                                </div>
+                                                <div class="flex-1 min-w-0">
+                                                    <div class="flex justify-between items-start mb-1">
+                                                        <p class="text-sm font-bold text-gray-900 leading-snug truncate pr-6 mt-0.5"><?php echo esc_html($notif['title']); ?></p>
+                                                        <span class="text-[10px] text-gray-400 font-medium whitespace-nowrap mt-1"><?php echo human_time_diff(strtotime($notif['created_at']), current_time('timestamp')); ?></span>
+                                                    </div>
+                                                    <p class="text-xs text-gray-600 leading-relaxed line-clamp-2"><?php echo esc_html($notif['message']); ?></p>
+                                                </div>
+                                            </div>
+                                            <button class="nds-mark-read absolute top-5 right-5 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-blue-600 hover:bg-white hover:shadow-sm opacity-0 group-hover:opacity-100 transition-all" title="Mark as read">
+                                                <i class="fas fa-check text-xs"></i>
+                                            </button>
+                                        </div>
+                                    <?php endforeach; ?>
+                                <?php else : ?>
+                                    <div class="p-12 text-center">
+                                        <div class="w-20 h-20 bg-gray-50 rounded-3xl flex items-center justify-center mx-auto mb-5 shadow-inner">
+                                            <i class="fas fa-bell-slash text-gray-300 text-3xl"></i>
+                                        </div>
+                                        <h4 class="text-base font-bold text-gray-800">All caught up!</h4>
+                                        <p class="text-sm text-gray-500 mt-2">No new notifications for you right now.</p>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+
+                            <div class="p-4 text-center border-t border-gray-50 bg-gray-50/30 rounded-b-2xl">
+                                <a href="<?php echo esc_url(nds_learner_portal_tab_url('activity')); ?>" class="group inline-flex items-center text-xs font-bold text-gray-500 hover:text-blue-600 transition-colors">
+                                    <span>View all portal activity</span>
+                                    <i class="fas fa-chevron-right ml-1.5 transform group-hover:translate-x-1 transition-transform"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
                     <a href="<?php echo esc_url(home_url('/')); ?>"
                        class="inline-flex items-center px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium shadow-sm transition-all duration-200">
                         <i class="fas fa-globe mr-2"></i>
@@ -735,99 +816,96 @@ function nds_learner_portal_tab_url($tab)
                     // no-op
                 }
             });
-        }
-    });
     </script>
 <?php endif; ?>
 
 <script>
-// #region agent log: detect top elements pushing navbar down
-(function() {
-    document.addEventListener('DOMContentLoaded', function() {
-        const logData = {
-            sessionId: 'debug-session',
-            runId: 'pre-fix',
-            hypothesisId: 'H1',
-            location: 'learner-portal.php:DOMContentLoaded',
-            message: 'Checking top elements that push navbar down',
-            data: {},
-            timestamp: Date.now()
-        };
-        
-        // Check for WordPress admin bar
-        const adminBar = document.getElementById('wpadminbar');
-        logData.data.hasAdminBar = !!adminBar;
-        if (adminBar) {
-            const adminBarRect = adminBar.getBoundingClientRect();
-            logData.data.adminBarHeight = adminBarRect.height;
-            logData.data.adminBarTop = adminBarRect.top;
-            const computedStyle = window.getComputedStyle(adminBar);
-            logData.data.adminBarBgColor = computedStyle.backgroundColor;
-            logData.data.adminBarDisplay = computedStyle.display;
-        }
-        
-        // Check all elements before the main portal wrapper
-        const portalWrapper = document.querySelector('.nds-tailwind-wrapper');
-        if (portalWrapper) {
-            const wrapperRect = portalWrapper.getBoundingClientRect();
-            logData.data.wrapperTop = wrapperRect.top;
-            logData.data.wrapperHeight = wrapperRect.height;
-            
-            // Find all elements before the wrapper
-            const allElements = document.querySelectorAll('body > *');
-            const elementsBeforeWrapper = [];
-            allElements.forEach(function(el) {
-                if (el === portalWrapper) return;
-                const rect = el.getBoundingClientRect();
-                if (rect.top < wrapperRect.top && rect.height > 0) {
-                    const computed = window.getComputedStyle(el);
-                    elementsBeforeWrapper.push({
-                        tagName: el.tagName,
-                        id: el.id || '',
-                        className: el.className || '',
-                        height: rect.height,
-                        top: rect.top,
-                        backgroundColor: computed.backgroundColor,
-                        display: computed.display,
-                        position: computed.position
-                    });
-                }
-            });
-            logData.data.elementsBeforeWrapper = elementsBeforeWrapper;
-        }
-        
-        // Check for any green-colored elements at top
-        const bodyChildren = Array.from(document.body.children);
-        const topGreenElements = [];
-        bodyChildren.forEach(function(el) {
-            const rect = el.getBoundingClientRect();
-            if (rect.top < 100 && rect.height > 20) {
-                const computed = window.getComputedStyle(el);
-                const bgColor = computed.backgroundColor;
-                // Check if green-ish (simplified check)
-                if (bgColor.includes('rgb') || bgColor.includes('#')) {
-                    topGreenElements.push({
-                        tagName: el.tagName,
-                        id: el.id || '',
-                        className: el.className || '',
-                        height: rect.height,
-                        top: rect.top,
-                        backgroundColor: bgColor,
-                        zIndex: computed.zIndex
-                    });
-                }
+document.addEventListener('DOMContentLoaded', function() {
+    const bell = document.getElementById('nds-notification-bell');
+    const dropdown = document.getElementById('nds-notification-dropdown');
+    const markAllBtn = document.getElementById('nds-mark-all-read');
+    
+    if (bell && dropdown) {
+        bell.addEventListener('click', function(e) {
+            e.stopPropagation();
+            dropdown.classList.toggle('hidden');
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!dropdown.contains(e.target) && !bell.contains(e.target)) {
+                dropdown.classList.add('hidden');
             }
         });
-        logData.data.topGreenElements = topGreenElements;
-        
-        fetch('http://127.0.0.1:7247/ingest/dd126561-a5b5-4577-8b70-512cd5168604', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(logData)
-        }).catch(function() {});
+    }
+
+    // Mark as read click
+    document.querySelectorAll('.nds-mark-read').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const parent = this.closest('[data-id]');
+            const id = parent.dataset.id;
+            
+            // Simple visual removal and badge update (AJAX can be added later or integrated now)
+            parent.style.opacity = '0.5';
+            parent.style.pointerEvents = 'none';
+            
+            // Call AJAX to mark as read
+            fetch('<?php echo admin_url('admin-ajax.php'); ?>', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    action: 'nds_mark_notification_read',
+                    id: id,
+                    nonce: '<?php echo wp_create_nonce("nds_notifications"); ?>'
+                })
+            }).then(() => {
+                parent.remove();
+                updateBadge();
+            });
+        });
     });
-})();
-// #endregion
+
+    if (markAllBtn) {
+        markAllBtn.addEventListener('click', function() {
+             fetch('<?php echo admin_url('admin-ajax.php'); ?>', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    action: 'nds_mark_all_notifications_read',
+                    student_id: '<?php echo $student_id; ?>',
+                    nonce: '<?php echo wp_create_nonce("nds_notifications"); ?>'
+                })
+            }).then(() => {
+                document.getElementById('nds-notification-list').innerHTML = `
+                    <div class="p-12 text-center">
+                        <div class="w-20 h-20 bg-gray-50 rounded-3xl flex items-center justify-center mx-auto mb-5 shadow-inner">
+                            <i class="fas fa-bell-slash text-gray-300 text-3xl"></i>
+                        </div>
+                        <h4 class="text-base font-bold text-gray-800">All caught up!</h4>
+                        <p class="text-sm text-gray-500 mt-2">No new notifications for you right now.</p>
+                    </div>
+                `;
+                updateBadge(true);
+                markAllBtn.remove();
+            });
+        });
+    }
+
+    function updateBadge(clear = false) {
+        const badge = document.getElementById('nds-notification-badge');
+        if (!badge) return;
+        if (clear) {
+            badge.remove();
+            return;
+        }
+        const current = parseInt(badge.textContent.trim());
+        if (current > 1) {
+            badge.textContent = current - 1;
+        } else {
+            badge.remove();
+        }
+    }
+});
 </script>
 
 <?php wp_footer(); ?>

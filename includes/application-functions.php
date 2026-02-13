@@ -379,11 +379,23 @@ function nds_handle_application_form_submission() {
         $application_no = 'APP-' . date('Y') . '-' . str_pad($application_form_id, 6, '0', STR_PAD_LEFT);
         
         // Insert into applications (workflow tracking)
+        // Infer program_id and faculty_id from course_id for data integrity
+        $course_info = $wpdb->get_row($wpdb->prepare(
+            "SELECT c.program_id, p.faculty_id 
+             FROM {$wpdb->prefix}nds_courses c
+             JOIN {$wpdb->prefix}nds_programs p ON c.program_id = p.id
+             WHERE c.id = %d",
+            $data['course_id']
+        ), ARRAY_A);
+
+        $program_id = $course_info ? $course_info['program_id'] : null;
+        $faculty_id = $course_info ? $course_info['faculty_id'] : null;
+
         $application_data = [
             'application_no' => $application_no,
             'wp_user_id' => get_current_user_id() ?: null,
             'student_id' => null, // Will be set when student is created
-            'program_id' => null, // Can be inferred from course if needed
+            'program_id' => $program_id,
             'course_id' => $data['course_id'],
             'academic_year_id' => null, // Can be set based on current year
             'semester_id' => null, // Can be set based on current semester
@@ -404,6 +416,7 @@ function nds_handle_application_form_submission() {
             if (!$course_exists) {
                 // If course no longer exists, store NULL so insert won’t violate FK
                 $application_data['course_id'] = null;
+                $application_data['program_id'] = null;
             }
         }
         
@@ -437,13 +450,21 @@ function nds_handle_application_form_submission() {
         ), ARRAY_A);
         
         if ($existing_student) {
-            // Student exists, update the application with student_id
+            // Student exists, update the application and student with student_id and faculty_id
             $student_id = $existing_student['id'];
             $wpdb->update(
                 $wpdb->prefix . 'nds_applications',
                 ['student_id' => $student_id],
                 ['id' => $application_id]
             );
+            
+            // Optionally update student's faculty_id if it's currently NULL
+            $wpdb->query($wpdb->prepare(
+                "UPDATE {$wpdb->prefix}nds_students 
+                 SET faculty_id = COALESCE(faculty_id, %d) 
+                 WHERE id = %d",
+                $faculty_id, $student_id
+            ));
             
             // Get student name for folder and file naming
             $student_info = $wpdb->get_row($wpdb->prepare(
@@ -483,6 +504,7 @@ function nds_handle_application_form_submission() {
             $student_data = [
                 'student_number' => $student_number,
                 'wp_user_id' => get_current_user_id() ?: null,
+                'faculty_id' => $faculty_id,
                 'first_name' => $first_name,
                 'last_name' => $last_name,
                 'email' => $data['email'],
@@ -594,7 +616,7 @@ function nds_handle_application_form_submission() {
         $message = "A new application has been submitted.\n\n";
         $message .= "Applicant: " . $data['full_name'] . "\n";
         $message .= "Email: " . $data['email'] . "\n";
-        $message .= "Course: " . $data['course_name'] . "\n";
+        $message .= "Qualification: " . $data['course_name'] . "\n";
         $message .= "Application Number: " . $application_no . "\n";
         $message .= "Application ID: " . $application_id . "\n\n";
         $message .= "View application: " . admin_url('admin.php?page=nds-applications&id=' . $application_id);

@@ -53,12 +53,19 @@ function nds_course_overview_page_content() {
         ORDER BY s.last_name, s.first_name
     ", $course_id), ARRAY_A);
 
-    // Get all students for drag-and-drop assignment
-    $all_students = $wpdb->get_results("
-        SELECT s.* FROM {$table_students} s
+    // Get all active students for drag-and-drop assignment
+    // Exclude students already enrolled in other courses
+    $all_students = $wpdb->get_results($wpdb->prepare("
+        SELECT s.* 
+        FROM {$table_students} s
         WHERE s.status = 'active'
+        AND s.id NOT IN (
+            SELECT DISTINCT student_id 
+            FROM {$table_enrollments} 
+            WHERE course_id != %d AND status = 'active'
+        )
         ORDER BY s.last_name, s.first_name
-    ", ARRAY_A);
+    ", $course_id), ARRAY_A);
 
     // Get lecturers assigned to this course
     $lecturers = $wpdb->get_results($wpdb->prepare("
@@ -123,34 +130,59 @@ function nds_course_overview_page_content() {
     <div class="wrap">
         <div class="nds-tailwind-wrapper bg-gray-50 min-h-screen p-8" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
 
-            <!-- Breadcrumb Navigation -->
-            <div class="max-w-7xl mx-auto mb-6">
-                <nav class="flex items-center space-x-2 text-sm text-gray-600">
-                    <a href="<?php echo admin_url('admin.php?page=nds-academy'); ?>" class="hover:text-blue-600 transition-colors">
-                        <i class="fas fa-home mr-1"></i>NDS Academy
-                    </a>
-                    <i class="fas fa-chevron-right text-gray-400"></i>
-                    <a href="<?php echo admin_url('admin.php?page=nds-faculties'); ?>" class="hover:text-blue-600 transition-colors">
-                        Faculties
-                    </a>
-                    <?php if (!empty($course['faculty_id'])): ?>
-                        <i class="fas fa-chevron-right text-gray-400"></i>
-                        <a href="<?php echo admin_url('admin.php?page=nds-faculties&action=edit&edit=' . intval($course['faculty_id'])); ?>" class="hover:text-blue-600 transition-colors">
-                            <?php echo esc_html($course['faculty_name']); ?>
-                        </a>
-                    <?php endif; ?>
-                    <i class="fas fa-chevron-right text-gray-400"></i>
-                    <a href="<?php echo admin_url('admin.php?page=nds-programs&faculty_id=' . intval($course['faculty_id'])); ?>" class="hover:text-blue-600 transition-colors">
-                        <?php echo esc_html($course['program_name']); ?>
-                    </a>
-                    <i class="fas fa-chevron-right text-gray-400"></i>
-                    <span class="text-gray-900 font-medium"><?php echo esc_html($course['name']); ?></span>
-                </nav>
-            </div>
+            <!-- UPDATED HEADER SECTION to match qualifications page -->
+            <div class="max-w-7xl mx-auto">
+                <!-- Header -->
+                <div class="bg-white shadow-sm border-b border-gray-200">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex justify-between items-center py-6">
+                            <div class="flex items-center space-x-4">
+                                <div class="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                                    <span class="dashicons dashicons-welcome-learn-more text-white text-2xl"></span>
+                                </div>
+                                <div>
+                                    <h1 class="text-3xl font-bold text-gray-900">
+                                        <strong><?php echo esc_html($course['name']); ?></strong>
+                                    </h1>
+                                    <p class="text-sm text-gray-600 mt-1">Course overview and management</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <a href="<?php echo esc_url(admin_url('admin.php?page=nds-courses')); ?>"
+                                    class="inline-flex items-center px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium shadow-sm transition-all duration-200">
+                                    <i class="fas fa-arrow-left mr-2"></i>
+                                    Back to Qualifications
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-        <!-- Header Section -->
-        <div class="max-w-7xl mx-auto">
-            
+                <!-- Breadcrumb Navigation -->
+                <div class="mt-6 mb-6">
+                    <nav class="flex items-center space-x-2 text-sm text-gray-600">
+                        <a href="<?php echo admin_url('admin.php?page=nds-academy'); ?>" class="hover:text-blue-600 transition-colors">
+                            <i class="fas fa-home mr-1"></i>NDS Academy
+                        </a>
+                        <i class="fas fa-chevron-right text-gray-400"></i>
+                        <a href="<?php echo admin_url('admin.php?page=nds-faculties'); ?>" class="hover:text-blue-600 transition-colors">
+                            Faculties
+                        </a>
+                        <?php if (!empty($course['faculty_id'])): ?>
+                            <i class="fas fa-chevron-right text-gray-400"></i>
+                            <a href="<?php echo admin_url('admin.php?page=nds-faculties&action=edit&edit=' . intval($course['faculty_id'])); ?>" class="hover:text-blue-600 transition-colors">
+                                <?php echo esc_html($course['faculty_name']); ?>
+                            </a>
+                        <?php endif; ?>
+                        <i class="fas fa-chevron-right text-gray-400"></i>
+                        <a href="<?php echo admin_url('admin.php?page=nds-programs&faculty_id=' . intval($course['faculty_id'])); ?>" class="hover:text-blue-600 transition-colors">
+                            <?php echo esc_html($course['program_name']); ?>
+                        </a>
+                        <i class="fas fa-chevron-right text-gray-400"></i>
+                        <span class="text-gray-900 font-medium"><?php echo esc_html($course['name']); ?></span>
+                    </nav>
+                </div>
+
             <!-- Success Messages -->
             <?php if (isset($_GET['career_path_saved']) && $_GET['career_path_saved'] === 'success'): ?>
                 <div class="mb-6 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg">
@@ -165,24 +197,6 @@ function nds_course_overview_page_content() {
                     <strong>Success!</strong> Career path has been deleted successfully.
                 </div>
             <?php endif; ?>
-            
-            <div class="flex justify-between items-center mb-8">
-                <div>
-                    <h1 class="wp-heading-inline text-4xl font-bold text-gray-900 mb-2">
-                        <i class="fas fa-book text-green-600 mr-4"></i><?php echo esc_html($course['name']); ?>
-                    </h1>
-                    <p class="text-gray-600 text-lg">Course overview and management</p>
-                </div>
-                <div class="flex gap-3">
-                    <a href="<?php echo admin_url('admin.php?page=nds-courses'); ?>" 
-                       class="page-title-action bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-6 rounded-lg flex items-center gap-2 transition-colors duration-200">
-                        <i class="fas fa-arrow-left"></i>
-                        Back to Courses
-                    </a>
-                </div>
-            </div>
-
-            <!-- Removed duplicate breadcrumb section to avoid redundancy -->
 
             <!-- Two Column Layout -->
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -213,10 +227,20 @@ function nds_course_overview_page_content() {
                                                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                                                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Enrolled</th>
+                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Course</th>
                                             </tr>
                                         </thead>
                                         <tbody class="bg-white divide-y divide-gray-200">
-                                            <?php foreach ($enrolled_students as $student): ?>
+                                            <?php foreach ($enrolled_students as $student): 
+                                                // Get student's current course (for verification)
+                                                $current_course = $wpdb->get_var($wpdb->prepare("
+                                                    SELECT c.name 
+                                                    FROM {$table_enrollments} se
+                                                    LEFT JOIN {$table_courses} c ON se.course_id = c.id
+                                                    WHERE se.student_id = %d AND se.status = 'active'
+                                                    LIMIT 1
+                                                ", $student['id']));
+                                            ?>
                                                 <tr class="student-item">
                                                     <td class="px-4 py-2 flex items-center space-x-2">
                                                         <?php if (!empty($student['avatar_url'])): ?>
@@ -255,6 +279,9 @@ function nds_course_overview_page_content() {
                                                     </td>
                                                      <td class="px-4 py-2 text-gray-700">
                                                          <?php echo !empty($student['enrollment_date']) ? esc_html(date('Y-m-d', strtotime($student['enrollment_date']))) : '<span class="text-gray-400">-</span>'; ?>
+                                                     </td>
+                                                     <td class="px-4 py-2 text-gray-700">
+                                                         <?php echo esc_html($current_course ?: 'This course'); ?>
                                                      </td>
                                                 </tr>
                                             <?php endforeach; ?>
@@ -397,16 +424,30 @@ function nds_course_overview_page_content() {
                                     foreach ($all_students as $student): 
                                         if (!in_array($student['id'], array_column($enrolled_students, 'id'))): 
                                             $available_count++;
+                                            // Check if student is already enrolled in another course
+                                            $enrolled_in_other = $wpdb->get_var($wpdb->prepare("
+                                                SELECT COUNT(*) 
+                                                FROM {$table_enrollments} 
+                                                WHERE student_id = %d AND course_id != %d AND status = 'active'
+                                            ", $student['id'], $course_id));
+                                            $enrolled_in_other_text = $enrolled_in_other ? ' (Already in another course)' : '';
                                     ?>
                                         <div class="student-item bg-white border border-gray-200 rounded-lg p-3 cursor-move hover:shadow-md transition-shadow" 
-                                             draggable="true" data-student-id="<?php echo $student['id']; ?>">
+                                             draggable="true" data-student-id="<?php echo $student['id']; ?>"
+                                             data-already-enrolled="<?php echo $enrolled_in_other ? 'true' : 'false'; ?>">
                                             <div class="flex items-center space-x-3">
                                                 <div class="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
                                                     <?php echo strtoupper(substr($student['first_name'], 0, 1) . substr($student['last_name'], 0, 1)); ?>
                                                 </div>
                                                 <div class="flex-1">
-                                                    <p class="font-medium text-gray-900"><?php echo esc_html($student['first_name'] . ' ' . $student['last_name']); ?></p>
+                                                    <p class="font-medium text-gray-900"><?php echo esc_html($student['first_name'] . ' ' . $student['last_name'] . $enrolled_in_other_text); ?></p>
                                                     <p class="text-sm text-gray-500"><?php echo esc_html($student['student_number']); ?></p>
+                                                    <?php if ($enrolled_in_other): ?>
+                                                        <p class="text-xs text-amber-600 mt-1">
+                                                            <i class="fas fa-exclamation-triangle mr-1"></i>
+                                                            Student will be moved from their current course
+                                                        </p>
+                                                    <?php endif; ?>
                                                 </div>
                                             </div>
                                         </div>
@@ -454,6 +495,21 @@ function nds_course_overview_page_content() {
                                             <p class="text-gray-600 text-sm max-w-xs">Drag students from the left column to enroll them in this course</p>
                                         </div>
                                     <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 p-4 bg-blue-50 rounded-lg">
+                            <div class="flex items-start">
+                                <div class="flex-shrink-0">
+                                    <i class="fas fa-info-circle text-blue-500 mt-1"></i>
+                                </div>
+                                <div class="ml-3">
+                                    <h4 class="text-sm font-medium text-blue-800">Important Notice</h4>
+                                    <p class="text-sm text-blue-700 mt-1">
+                                        <strong>One Course Per Student:</strong> Each student can only be enrolled in one qualification/course at a time. 
+                                        If you assign a student who is already enrolled in another course, they will be automatically removed from their current course.
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -951,6 +1007,16 @@ function nds_course_overview_page_content() {
             const studentId = draggedElement.dataset.studentId;
             const targetContainer = e.currentTarget;
             
+            // Check if student is already enrolled in another course (when moving to enrolled)
+            if (targetContainer.id === 'enrolled-students') {
+                const alreadyEnrolled = draggedElement.dataset.alreadyEnrolled === 'true';
+                if (alreadyEnrolled) {
+                    if (!confirm('This student is already enrolled in another course. Moving them will remove them from their current course. Continue?')) {
+                        return;
+                    }
+                }
+            }
+            
             // Move the element to the new container
             targetContainer.appendChild(draggedElement);
             
@@ -1013,9 +1079,15 @@ function nds_course_overview_page_content() {
                 // Show success message with more details
                 const addedCount = data.data?.added_count || 0;
                 const removedCount = data.data?.removed_count || 0;
+                const movedCount = data.data?.moved_count || 0;
                 let message = 'Student enrollments updated successfully!';
-                if (addedCount > 0 || removedCount > 0) {
-                    message += ` (${addedCount} added, ${removedCount} removed)`;
+                let details = [];
+                if (addedCount > 0) details.push(`${addedCount} added`);
+                if (removedCount > 0) details.push(`${removedCount} removed`);
+                if (movedCount > 0) details.push(`${movedCount} moved from other courses`);
+                
+                if (details.length > 0) {
+                    message += ` (${details.join(', ')})`;
                 }
                 
                 // Hide loader and show success
@@ -1074,6 +1146,7 @@ function nds_course_overview_page_content() {
                                         <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                                         <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                         <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Enrolled</th>
+                                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Course</th>
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-200">
@@ -1239,5 +1312,4 @@ function nds_course_overview_page_content() {
     });
     </script>
     <?php
-}
-?>
+}   

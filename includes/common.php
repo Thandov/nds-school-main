@@ -173,8 +173,8 @@ function register_education_paths() {
     );
 
     foreach ($paths as $path) {
-        // 1. Register faculty and create WordPress page (formerly education path)
-        $wpdb->insert($wpdb->prefix.'nds_education_paths', [
+        // 1. Register faculty and create WordPress page
+        $wpdb->insert($wpdb->prefix . 'nds_faculties', [
             'name' => $path['education_paths'],
             'description' => $path['education_paths']
         ]);
@@ -190,10 +190,10 @@ function register_education_paths() {
 
         // 2. Register programs and create categories
         foreach ($path['programs'] as $program_name => $program) {
-            $wpdb->insert($wpdb->prefix.'nds_program_types', [
+            $wpdb->insert($wpdb->prefix . 'nds_programs', [
                 'name' => $program_name,
                 'description' => $program_name,
-                'path_id' => $path_id
+                'faculty_id' => $path_id
             ]);
             $program_id = $wpdb->insert_id;
 
@@ -310,6 +310,13 @@ function displayRecipePic($attachment_id)
  * KIT Commons - Reusable UI Components
  */
 class KIT_Commons {
+    /**
+     * Get top-level academic Programs.
+     *
+     * NOTE: For historical reasons these are stored in the nds_faculties table,
+     * but in the current university model they represent Programs such as
+     * "Full-time Qualifications", "Part-time Qualifications", etc.
+     */
     public static function getFaculties() {
         global $wpdb;
         return $wpdb->get_results("SELECT id, name, description FROM {$wpdb->prefix}nds_faculties ORDER BY name ASC");
@@ -320,7 +327,10 @@ class KIT_Commons {
         $faculty_id = intval($faculty_id);
         if ($faculty_id <= 0) return [];
         return $wpdb->get_results($wpdb->prepare(
-            "SELECT id, name, program_id, max_students FROM {$wpdb->prefix}nds_courses WHERE faculty_id = %d ORDER BY name ASC",
+            "SELECT c.id, c.name, c.program_id 
+             FROM {$wpdb->prefix}nds_courses c
+             JOIN {$wpdb->prefix}nds_programs p ON c.program_id = p.id
+             WHERE p.faculty_id = %d ORDER BY c.name ASC",
             $faculty_id
         ));
     }
@@ -399,7 +409,10 @@ class KIT_Commons {
         // If faculty_id is provided, get courses for that faculty
         if ($faculty_id > 0) {
             $courses = $wpdb->get_results($wpdb->prepare(
-                "SELECT id, name FROM {$wpdb->prefix}nds_courses WHERE faculty_id = %d ORDER BY name ASC",
+                "SELECT c.id, c.name 
+                 FROM {$wpdb->prefix}nds_courses c
+                 JOIN {$wpdb->prefix}nds_programs p ON c.program_id = p.id
+                 WHERE p.faculty_id = %d ORDER BY c.name ASC",
                 $faculty_id
             ));
             
@@ -416,6 +429,125 @@ class KIT_Commons {
         echo '</select>';
     }
     
+    /**
+     * Courses screen: Quick Filters card
+     *
+     * @param array<int, array{id:int, program_name:string}> $programs
+     * @return void
+     */
+    public static function CoursesQuickFilters(array $programs) {
+        ?>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-5 py-4 border-b border-gray-100">
+                <h2 class="text-sm font-semibold text-gray-900">Quick Filters</h2>
+                <p class="text-xs text-gray-500">Filter courses by program or status</p>
+            </div>
+            <div class="p-4 space-y-3">
+                <select class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="">All Programs</option>
+                    <?php foreach ($programs as $program): ?>
+                        <option value="<?php echo intval($program['id']); ?>">
+                            <?php echo esc_html($program['program_name']); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+
+                <select class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="draft">Draft</option>
+                </select>
+
+                <button type="button" onclick="applyFilters()"
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg">
+                    Apply Filters
+                </button>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Courses screen: Lecturer Assignment card
+     *
+     * @param array<int, array{id:int,name:string}> $courses
+     * @param array<int, array{id:int,first_name:string,last_name:string,role:string}> $staff
+     * @return void
+     */
+    public static function CoursesLecturerAssignment(array $courses, array $staff) {
+        ?>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-5 py-4 border-b border-gray-100">
+                <h2 class="text-sm font-semibold text-gray-900">Assign Chef Instructor</h2>
+                <p class="text-xs text-gray-500">Assign instructors to courses</p>
+            </div>
+            <div class="p-4">
+                <form id="assignLecturerForm" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Course</label>
+                        <select id="assign_course_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            <option value="">Select Course</option>
+                            <?php foreach ($courses as $course): ?>
+                                <option value="<?php echo intval($course['id']); ?>">
+                                    <?php echo esc_html($course['name']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Chef Instructor</label>
+                        <select id="assign_lecturer_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            <option value="">Select Chef Instructor</option>
+                            <?php foreach ($staff as $member): ?>
+                                <option value="<?php echo intval($member['id']); ?>">
+                                    <?php echo esc_html($member['first_name'] . ' ' . $member['last_name'] . ' (' . $member['role'] . ')'); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <button type="button" onclick="assignLecturer()"
+                        class="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg">
+                        <i class="fas fa-plus mr-2"></i>Assign Chef Instructor
+                    </button>
+                </form>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Courses screen: Quick Actions card
+     *
+     * @return void
+     */
+    public static function CoursesQuickActions() {
+        ?>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-5 py-4 border-b border-gray-100">
+                <h2 class="text-sm font-semibold text-gray-900">Quick Actions</h2>
+                <p class="text-xs text-gray-500">Navigate to related sections</p>
+            </div>
+            <div class="p-4 space-y-3">
+                <a href="<?php echo admin_url('admin.php?page=nds-programs'); ?>"
+                    class="w-full inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-md hover:shadow-lg">
+                    <i class="fas fa-graduation-cap mr-2"></i>Manage Programs
+                </a>
+                <a href="<?php echo admin_url('admin.php?page=nds-education-paths'); ?>"
+                    class="w-full inline-flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all duration-200 shadow-md hover:shadow-lg">
+                    <i class="fas fa-route mr-2"></i>Manage Paths
+                </a>
+                <button type="button" onclick="exportCourses()"
+                    class="w-full inline-flex items-center justify-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all duration-200 shadow-md hover:shadow-lg">
+                    <i class="fas fa-download mr-2"></i>Export Data
+                </button>
+            </div>
+        </div>
+        <?php
+    }
+
     /**
      * Render loading overlay component (center-center)
      * Call this once per page, then use JavaScript helpers to show/hide

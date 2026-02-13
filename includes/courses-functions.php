@@ -911,6 +911,7 @@ function nds_get_program_type_name($program_id)
 function nds_get_courses()
 {
     global $wpdb;
-    $courses_table = $wpdb->prefix . "nds_courses"; // Ensure correct table name
-    return $wpdb->get_results($wpdb->prepare("SELECT * FROM $courses_table" ), ARRAY_A);
+    $courses_table = $wpdb->prefix . "nds_courses";
+    // FIX: Remove the unnecessary prepare() call
+    return $wpdb->get_results("SELECT * FROM {$courses_table} ORDER BY name ASC", ARRAY_A);
 }

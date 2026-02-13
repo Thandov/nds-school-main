@@ -3,12 +3,121 @@
  * NDS Academy Settings page content.
  * Expects: $seed_status, $wipe_status, $wipe_tables_status, $import_export_status, $msg (set by nds_settings_page).
  */
+
 if (!defined('ABSPATH')) {
     exit;
 }
+
+// Store messages for JavaScript
+$js_messages = [
+    'seed' => ['status' => $seed_status, 'message' => $msg],
+    'wipe_core' => ['status' => $wipe_status, 'message' => $msg],
+    'wipe_selected' => ['status' => $wipe_tables_status, 'message' => $msg],
+    'import_export' => ['status' => $import_export_status, 'message' => $msg]
+];
 ?>
-    <div class="wrap">
-        <h1>NDS Academy Settings</h1>
+<div class="nds-tailwind-wrapper bg-gray-50 pb-32" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin-left: -20px; padding-left: 20px; margin-top: -20px;">
+    <style>
+        /* Ensure the WordPress footer doesn't overlap our custom dashboard */
+        body[class*="nds-settings"] #wpfooter { display: none !important; }
+        .nds-tailwind-wrapper { position: relative; z-index: 1; }
+    </style>
+    <!-- Modern Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center py-6">
+                <div class="flex items-center space-x-4">
+                    <div class="w-12 h-12 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-xl flex items-center justify-center">
+                        <span class="dashicons dashicons-admin-settings text-white text-2xl"></span>
+                    </div>
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900" style="margin:0; line-height:1.2;">Academy Settings</h1>
+                        <p class="text-gray-600" style="margin:0;">Configure core system data, imports, exports, and access controls.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- ===== STATUS PANEL (RIGHT SIDE) ===== -->
+        <div id="nds-status-panel" style="
+            position: fixed;
+            right: 20px;
+            top: 100px;
+            width: 320px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            padding: 20px;
+            z-index: 9999;
+            border-left: 4px solid #9333ea;
+            display: none;
+            opacity: 0;
+            transform: translateX(20px);
+            transition: all 0.3s ease;
+        ">
+            <button id="nds-close-panel" style="
+                position: absolute;
+                top: 8px;
+                right: 8px;
+                background: none;
+                border: none;
+                font-size: 18px;
+                cursor: pointer;
+                color: #6b7280;
+                padding: 4px;
+                width: 24px;
+                height: 24px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            ">×</button>
+            
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 15px;">
+                <div id="nds-status-icon" style="
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 20px;
+                    background: #f3f4f6;
+                ">
+                    ⭕
+                </div>
+                <div>
+                    <h3 style="margin: 0; color: #1f2937; font-size: 16px;" id="nds-status-title">Processing</h3>
+                    <p style="margin: 4px 0 0 0; color: #6b7280; font-size: 13px;" id="nds-status-subtitle">Please wait...</p>
+                </div>
+            </div>
+            
+            <p id="nds-main-message" style="margin: 0; font-size: 14px; color: #374151; line-height: 1.5;">
+                Operation in progress
+            </p>
+            
+            <div id="nds-action-buttons" style="margin-top: 15px; display: none; gap: 10px;">
+                <button id="nds-dismiss-btn" style="
+                    padding: 8px 16px;
+                    background: #9333ea;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    font-size: 13px;
+                    cursor: pointer;
+                ">
+                    Dismiss
+                </button>
+            </div>
+        </div>
+        <!-- ===== END STATUS PANEL ===== -->
+        
+        <!-- Add SweetAlert2 CSS -->
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+        
         <style>
             .nds-settings-row {
                 display: flex;
@@ -53,69 +162,21 @@ if (!defined('ABSPATH')) {
                 .nds-settings-card {
                     margin-bottom: 20px;
                 }
+                #nds-status-panel {
+                    position: relative;
+                    right: auto;
+                    top: auto;
+                    width: 100%;
+                    margin: 20px 0;
+                }
             }
         </style>
-        <?php if ($seed_status === 'success'): ?>
-            <div class="notice notice-success">
-                <p><strong>Seed completed successfully.</strong></p>
-                <?php if (!empty($msg)): ?>
-                    <p><?php echo esc_html($msg); ?></p>
-                <?php endif; ?>
-            </div>
-        <?php elseif ($seed_status === 'error'): ?>
-            <div class="notice notice-error"><p><strong>Seed failed:</strong> <?php echo esc_html($msg ?: 'Unknown error occurred'); ?></p></div>
-        <?php endif; ?>
-        <?php if ($wipe_status === 'success'): ?>
-            <div class="notice notice-success"><p><?php echo esc_html($msg ?: 'Core tables wiped successfully.'); ?></p></div>
-        <?php elseif ($wipe_status === 'error'): ?>
-            <div class="notice notice-error"><p><?php echo esc_html($msg ?: 'Wipe operation failed'); ?></p></div>
-        <?php endif; ?>
-        <?php if ($wipe_tables_status === 'success'): ?>
-            <div class="notice notice-success"><p><?php echo esc_html($msg ?: 'Selected tables wiped successfully.'); ?></p></div>
-        <?php elseif ($wipe_tables_status === 'error'): ?>
-            <div class="notice notice-error"><p><?php echo esc_html($msg ?: 'Wipe selected tables operation failed'); ?></p></div>
-        <?php endif; ?>
-        <?php if ($import_export_status === 'success'): ?>
-            <div class="notice notice-success">
-                <p><?php echo esc_html($msg ?: 'Import/Export completed successfully.'); ?></p>
-                <?php
-                $skipped_details = get_transient('nds_import_skipped_details');
-                if (!empty($skipped_details) && is_array($skipped_details)) {
-                    delete_transient('nds_import_skipped_details');
-                    $count = count($skipped_details);
-                    ?>
-                    <p><strong>Skipped rows (<?php echo (int) $count; ?>):</strong></p>
-                    <table class="widefat striped" style="max-width:800px; margin-top:8px;">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Table</th>
-                                <th>Reason</th>
-                                <th>Detail</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($skipped_details as $i => $s) : ?>
-                                <tr>
-                                    <td><?php echo (int) ($i + 1); ?></td>
-                                    <td><code><?php echo esc_html($s['table']); ?></code></td>
-                                    <td><?php echo esc_html($s['reason'] === 'duplicate' ? 'Duplicate key (row already exists)' : 'Empty required field: ' . esc_html($s['column'])); ?></td>
-                                    <td><?php echo esc_html($s['row_hint']); ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                <?php } ?>
-            </div>
-        <?php elseif ($import_export_status === 'error'): ?>
-            <div class="notice notice-error"><p><?php echo esc_html($msg ?: 'Import/Export failed'); ?></p></div>
-        <?php endif; ?>
 
         <div class="nds-settings-row">
             <div class="nds-settings-card">
                 <h2>Seed</h2>
                 <p style="margin-bottom:12px;">Run sample data seed: All (LMS + Staff + Students), LMS only, Staff only, or Students only.</p>
-                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" onsubmit="return nds_show_loader_and_confirm(this, 'Run this seed now?', 'Seeding', 'Running seed...');">
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" id="seed-form">
                     <?php wp_nonce_field('nds_seed_nonce'); ?>
                     <input type="hidden" name="action" value="nds_seed" />
                     <label for="nds_seed_type" class="screen-reader-text">Seed type</label>
@@ -125,7 +186,7 @@ if (!defined('ABSPATH')) {
                         <option value="staff">Staff</option>
                         <option value="students">Students</option>
                     </select>
-                    <button type="submit" class="button button-primary">Run seed</button>
+                    <button type="submit" class="button button-primary" onclick="return handleSeed(event)">Run seed</button>
                 </form>
             </div>
 
@@ -141,7 +202,7 @@ if (!defined('ABSPATH')) {
                     )
                 );
                 ?>
-                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" onsubmit="return nds_show_loader_and_confirm(this, 'This will TRUNCATE the selected tables. Continue?', 'Wiping Selected Tables', 'Truncating selected nds_ tables...');">
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" id="wipe-selected-form">
                     <?php wp_nonce_field('nds_wipe_selected_nds_tables_nonce'); ?>
                     <input type="hidden" name="action" value="nds_wipe_selected_nds_tables" />
                     <p><strong>Wipe Selected nds_ Tables</strong></p>
@@ -162,7 +223,7 @@ if (!defined('ABSPATH')) {
                         <?php endif; ?>
                     </div>
                     <p style="margin-top:8px;">
-                        <button type="submit" class="button button-secondary">Wipe Selected Tables</button>
+                        <button type="submit" class="button button-secondary" onclick="return handleWipeSelected(event)">Wipe Selected Tables</button>
                     </p>
                 </form>
                 <script>
@@ -183,17 +244,17 @@ if (!defined('ABSPATH')) {
                 <h2>Import / Export</h2>
                 <p style="margin-bottom:12px;">Export database to CSV (ZIP) or import from <strong>NDS Database System.xlsx</strong>. If no file is selected, import uses the default <strong>assets/NDS Database System.xlsx</strong>. Columns named <code>*_ignore</code> are skipped on import.</p>
                 <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start;">
-                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin:0;">
+                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" id="export-form" style="margin:0;">
                         <?php wp_nonce_field('nds_export_database_nonce'); ?>
                         <input type="hidden" name="action" value="nds_export_database" />
-                        <button type="submit" class="button nds-btn-brand">Export database (ZIP)</button>
+                        <button type="submit" class="button nds-btn-brand" onclick="return handleExport(event)">Export database (ZIP)</button>
                     </form>
-                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" enctype="multipart/form-data" style="margin:0;">
+                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" id="import-form" enctype="multipart/form-data" style="margin:0;">
                         <?php wp_nonce_field('nds_import_excel_nonce'); ?>
                         <input type="hidden" name="action" value="nds_import_excel" />
                         <label for="nds_import_xlsx" class="screen-reader-text">Select Excel file</label>
                         <input type="file" name="nds_import_xlsx" id="nds_import_xlsx" accept=".xlsx" style="margin-right:8px;" />
-                        <button type="submit" class="button nds-btn-brand" onclick="return nds_show_loader_and_confirm(this.form, 'Import will insert rows from the Excel file. Existing rows may cause duplicate key errors. Continue?', 'Import', 'Importing...');">Import from Excel</button>
+                        <button type="submit" class="button nds-btn-brand" onclick="return handleImport(event)">Import from Excel</button>
                     </form>
                 </div>
                 <p class="description" style="margin-top:10px;">Export creates CSVs + setup guide in a ZIP. Import respects FK order and skips <code>*_ignore</code> columns. If import fails, check the PHP error log (e.g. <code>wp-content/debug.log</code> when <code>WP_DEBUG_LOG</code> is on, or your server log); errors are prefixed with <code>[NDS Import]</code>.</p>
@@ -209,12 +270,11 @@ if (!defined('ABSPATH')) {
                 $hide_admin_bar = isset($_POST['nds_hide_subscriber_admin_bar']) ? '1' : '0';
                 update_option('nds_block_subscribers_backend', $block_subscribers);
                 update_option('nds_hide_subscriber_admin_bar', $hide_admin_bar);
-                echo '<div class="notice notice-success is-dismissible"><p>Settings saved successfully.</p></div>';
             }
             $block_subscribers = get_option('nds_block_subscribers_backend', '1');
             $hide_admin_bar = get_option('nds_hide_subscriber_admin_bar', '0');
             ?>
-            <form method="post" action="">
+            <form method="post" action="" id="access-form">
                 <?php wp_nonce_field('nds_access_settings_nonce'); ?>
                 <table class="form-table">
                     <tr>
@@ -304,22 +364,339 @@ if (!defined('ABSPATH')) {
         <div class="card" style="padding:16px; max-width:800px; margin-top:20px; border-left: 4px solid #dc3232;">
             <h2 style="color: #dc3232;">⚠️ Wipe Core Tables</h2>
             <p><strong>DANGER:</strong> This will permanently delete ALL data from faculties, programs, courses, and staff tables. This action cannot be undone!</p>
-            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" onsubmit="return nds_show_loader_and_confirm(this, '⚠️ WARNING: This will DELETE ALL data from:\n\n- Faculties\n- Programs\n- Courses\n- Staff\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?', 'Wiping Core Tables', 'Deleting all faculties, programs, courses and staff...');">
+            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" id="wipe-core-form">
                 <?php wp_nonce_field('nds_wipe_core_tables_nonce'); ?>
                 <input type="hidden" name="action" value="nds_wipe_core_tables" />
-                <button type="submit" class="button button-secondary" style="background-color: #dc3232; border-color: #dc3232; color: white;">Wipe All Core Tables</button>
+                <button type="submit" class="button button-secondary" onclick="return handleWipeCore(event)" style="background-color: #dc3232; border-color: #dc3232; color: white;">Wipe All Core Tables</button>
             </form>
         </div>
     </div>
+</div>
+
+    <!-- Add SweetAlert2 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
     <script type="text/javascript">
-        function nds_show_loader_and_confirm(form, confirmMessage, loaderTitle, loaderMessage) {
-            if (!window.NDSNotification || typeof NDSNotification.loading !== 'function') {
-                return confirm(confirmMessage);
+    // Status Panel Functions
+    var ndsMessages = <?php echo json_encode($js_messages); ?>;
+    
+    function showStatusPanel() {
+        const panel = document.getElementById('nds-status-panel');
+        panel.style.display = 'block';
+        setTimeout(() => {
+            panel.style.opacity = '1';
+            panel.style.transform = 'translateX(0)';
+        }, 10);
+    }
+    
+    function hideStatusPanel() {
+        const panel = document.getElementById('nds-status-panel');
+        panel.style.opacity = '0';
+        panel.style.transform = 'translateX(20px)';
+        setTimeout(() => {
+            panel.style.display = 'none';
+        }, 300);
+    }
+    
+    function showLoading(title, subtitle, message) {
+        const icon = document.getElementById('nds-status-icon');
+        const panel = document.getElementById('nds-status-panel');
+        
+        // Set loading state
+        panel.style.borderLeftColor = '#9333ea';
+        icon.innerHTML = '<div style="width: 20px; height: 20px; border: 2px solid #f3f4f6; border-top: 2px solid #9333ea; border-radius: 50%; animation: spin 1s linear infinite;"></div>';
+        icon.style.background = '#f3f4f6';
+        
+        // Update text
+        document.getElementById('nds-status-title').textContent = title;
+        document.getElementById('nds-status-subtitle').textContent = subtitle;
+        document.getElementById('nds-main-message').textContent = message;
+        
+        // Hide action buttons
+        document.getElementById('nds-action-buttons').style.display = 'none';
+        
+        // Show panel
+        showStatusPanel();
+    }
+    
+    function showSuccess(title, message) {
+        const icon = document.getElementById('nds-status-icon');
+        const panel = document.getElementById('nds-status-panel');
+        
+        // Set success state
+        panel.style.borderLeftColor = '#10b981';
+        icon.innerHTML = '✅';
+        icon.style.background = '#d1fae5';
+        
+        // Update text
+        document.getElementById('nds-status-title').textContent = title;
+        document.getElementById('nds-status-subtitle').textContent = 'Operation completed';
+        document.getElementById('nds-main-message').textContent = message;
+        
+        // Show dismiss button
+        document.getElementById('nds-action-buttons').style.display = 'flex';
+        
+        // Auto-hide after 5 seconds
+        setTimeout(hideStatusPanel, 5000);
+        
+        // Show SweetAlert success message
+        Swal.fire({
+            icon: 'success',
+            title: title,
+            text: message,
+            timer: 4000,
+            timerProgressBar: true,
+            showConfirmButton: false,
+            position: 'top-end',
+            toast: true,
+            background: '#f0fdf4',
+            color: '#065f46',
+            iconColor: '#10b981'
+        });
+    }
+    
+    function showError(title, message) {
+        const icon = document.getElementById('nds-status-icon');
+        const panel = document.getElementById('nds-status-panel');
+        
+        // Set error state
+        panel.style.borderLeftColor = '#ef4444';
+        icon.innerHTML = '❌';
+        icon.style.background = '#fee2e2';
+        
+        // Update text
+        document.getElementById('nds-status-title').textContent = title;
+        document.getElementById('nds-status-subtitle').textContent = 'Operation failed';
+        document.getElementById('nds-main-message').textContent = message;
+        
+        // Show dismiss button
+        document.getElementById('nds-action-buttons').style.display = 'flex';
+        
+        // Show SweetAlert error message
+        Swal.fire({
+            icon: 'error',
+            title: title,
+            text: message,
+            timer: 5000,
+            timerProgressBar: true,
+            showConfirmButton: false,
+            position: 'top-end',
+            toast: true,
+            background: '#fef2f2',
+            color: '#991b1b',
+            iconColor: '#ef4444'
+        });
+    }
+    
+    // Event Handlers
+    function handleSeed(e) {
+        e.preventDefault();
+        const form = e.target.form;
+        const type = document.getElementById('nds_seed_type').value;
+        const typeText = type === 'all' ? 'All Data' : 
+                       type === 'lms' ? 'LMS Data' :
+                       type === 'staff' ? 'Staff Data' : 'Students Data';
+        
+        Swal.fire({
+            title: `Run ${typeText} Seed?`,
+            text: 'This will create sample data in your database.',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#9333ea',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'Yes, run seed',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                showLoading('Running Seed', `Creating ${typeText.toLowerCase()}`, 'Please wait while we create the sample data...');
+                setTimeout(() => form.submit(), 500);
             }
-            if (!confirm(confirmMessage)) {
-                return false;
+        });
+        return false;
+    }
+    
+    function handleExport(e) {
+        e.preventDefault();
+        const form = e.target.form;
+        
+        Swal.fire({
+            title: 'Export Database?',
+            text: 'This will create a ZIP file with all your data.',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#9333ea',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'Yes, export',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                showLoading('Exporting', 'Creating backup files', 'Preparing database export...');
+                setTimeout(() => form.submit(), 500);
             }
-            NDSNotification.loading(loaderMessage || 'Please wait...', loaderTitle || 'Processing...');
-            return true;
+        });
+        return false;
+    }
+    
+    function handleImport(e) {
+        e.preventDefault();
+        const form = e.target.form;
+        const fileInput = document.getElementById('nds_import_xlsx');
+        const hasFile = fileInput && fileInput.files.length > 0;
+        
+        Swal.fire({
+            title: 'Import from Excel?',
+            html: hasFile 
+                ? 'Import from selected Excel file? Existing rows may cause duplicate key errors.'
+                : 'Import using default Excel file?',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#9333ea',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'Yes, import',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                showLoading('Importing', 'Reading Excel file', 'Processing spreadsheet data...');
+                setTimeout(() => form.submit(), 500);
+            }
+        });
+        return false;
+    }
+    
+    function handleWipeSelected(e) {
+        e.preventDefault();
+        const form = e.target.form;
+        const checkboxes = document.querySelectorAll('.nds-wipe-table-checkbox:checked');
+        
+        if (checkboxes.length === 0) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'No Tables Selected',
+                text: 'Please select at least one table to wipe.',
+                toast: true,
+                position: 'top-end',
+                timer: 3000,
+                showConfirmButton: false
+            });
+            return false;
         }
+        
+        Swal.fire({
+            title: `Wipe ${checkboxes.length} Table(s)?`,
+            html: `This will <strong>TRUNCATE ${checkboxes.length} selected table(s)</strong>.<br><br>This action <strong>CANNOT</strong> be undone!`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'Yes, wipe selected',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                showLoading('Wiping Tables', `Truncating ${checkboxes.length} table(s)`, 'Removing data from selected tables...');
+                setTimeout(() => form.submit(), 500);
+            }
+        });
+        return false;
+    }
+    
+    function handleWipeCore(e) {
+        e.preventDefault();
+        const form = e.target.form;
+        
+        Swal.fire({
+            title: '⚠️ DANGER!',
+            html: `This will <strong>DELETE ALL DATA</strong> from:<br>
+                  • Faculties<br>
+                  • Programs<br>
+                  • Courses<br>
+                  • Staff<br><br>
+                  <strong style="color: #dc3232;">This action CANNOT be undone!</strong>`,
+            icon: 'error',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3232',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'Yes, wipe everything',
+            cancelButtonText: 'Cancel',
+            backdrop: 'rgba(0,0,0,0.8)'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                showLoading('Wiping Core', 'Deleting all data', 'Removing all data from core tables...');
+                setTimeout(() => form.submit(), 500);
+            }
+        });
+        return false;
+    }
+    
+    // Check for existing messages on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        // Bind panel buttons
+        document.getElementById('nds-close-panel').addEventListener('click', hideStatusPanel);
+        document.getElementById('nds-dismiss-btn').addEventListener('click', hideStatusPanel);
+        
+        // Add CSS animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // Check for PHP messages and show them with SweetAlert
+        setTimeout(function() {
+            // Show success message for Import/Export if successful
+            if (ndsMessages.import_export.status === 'success') {
+                if (ndsMessages.import_export.message) {
+                    showSuccess('Import/Export Successful', ndsMessages.import_export.message);
+                } else {
+                    showSuccess('Import/Export Successful', 'Operation completed successfully!');
+                }
+            } else if (ndsMessages.import_export.status === 'error' && ndsMessages.import_export.message) {
+                showError('Import/Export Failed', ndsMessages.import_export.message);
+            }
+            
+            // Show success message for Seed if successful
+            if (ndsMessages.seed.status === 'success' && ndsMessages.seed.message) {
+                showSuccess('Seed Completed', ndsMessages.seed.message);
+            } else if (ndsMessages.seed.status === 'error' && ndsMessages.seed.message) {
+                showError('Seed Failed', ndsMessages.seed.message);
+            }
+            
+            // Show success message for Wipe Core if successful
+            if (ndsMessages.wipe_core.status === 'success' && ndsMessages.wipe_core.message) {
+                showSuccess('Tables Wiped', ndsMessages.wipe_core.message);
+            } else if (ndsMessages.wipe_core.status === 'error' && ndsMessages.wipe_core.message) {
+                showError('Wipe Failed', ndsMessages.wipe_core.message);
+            }
+            
+            // Show success message for Wipe Selected if successful
+            if (ndsMessages.wipe_selected.status === 'success' && ndsMessages.wipe_selected.message) {
+                showSuccess('Tables Wiped', ndsMessages.wipe_selected.message);
+            } else if (ndsMessages.wipe_selected.status === 'error' && ndsMessages.wipe_selected.message) {
+                showError('Wipe Failed', ndsMessages.wipe_selected.message);
+            }
+            
+            // If page was just loaded (no operations performed), show a welcome message
+            const allStatuses = Object.values(ndsMessages).map(msg => msg.status);
+            const hasAnyStatus = allStatuses.some(status => status !== null);
+            
+            if (!hasAnyStatus) {
+                // Page just loaded, show a subtle welcome message
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Ready!',
+                    text: 'NDS Academy Settings loaded successfully',
+                    timer: 2000,
+                    timerProgressBar: true,
+                    showConfirmButton: false,
+                    position: 'top-end',
+                    toast: true,
+                    background: '#f0fdf4',
+                    color: '#065f46',
+                    iconColor: '#10b981'
+                });
+            }
+        }, 500);
+    });
     </script>

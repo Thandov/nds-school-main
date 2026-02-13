@@ -102,21 +102,37 @@ class NDS_Calendar {
         if ($schedules_table_exists) {
             $total_schedules = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$schedules_table} WHERE is_active = 1");
         }
+
+        // --- NEW: Fetch lists for modals ---
+        $events_list = $wpdb->get_results("SELECT id, event_title as name, start_date as details FROM {$calendar_events_table} WHERE status = 'active' ORDER BY start_date DESC LIMIT 50", ARRAY_A);
+        $programs_list = $wpdb->get_results("SELECT id, name, status as details FROM {$programs_table} WHERE status = 'active' ORDER BY name ASC", ARRAY_A);
+        $schedules_list = $wpdb->get_results("
+            SELECT cs.id, c.name as name, CONCAT(cs.days, ' ', cs.start_time, '-', cs.end_time) as details 
+            FROM {$schedules_table} cs 
+            JOIN {$wpdb->prefix}nds_courses c ON cs.course_id = c.id 
+            WHERE cs.is_active = 1 
+            ORDER BY c.name ASC
+        ", ARRAY_A);
         
         ?>
         <div class="wrap">
-            <div class="nds-tailwind-wrapper bg-gray-50 min-h-screen" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+            <style>
+                /* Ensure the WordPress footer doesn't overlap our custom dashboard */
+                body[class*="nds-calendar"] #wpfooter { display: none !important; }
+                .nds-tailwind-wrapper { position: relative; z-index: 1; }
+            </style>
+            <div class="nds-tailwind-wrapper bg-gray-50 pb-32" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin-left: -20px; padding-left: 20px; margin-top: -20px;">
                 <!-- Header -->
                 <div class="bg-white shadow-sm border-b border-gray-200">
                     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                         <div class="flex justify-between items-center py-6">
                             <div class="flex items-center space-x-4">
-                                <div class="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                                <div class="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
                                     <i class="fas fa-calendar text-white text-2xl"></i>
                                 </div>
                                 <div>
-                                    <h1 class="text-3xl font-bold text-gray-900">Calendar</h1>
-                                    <p class="text-sm text-gray-600 mt-1">View and manage calendar events, programs, and schedules</p>
+                                    <h1 class="text-3xl font-bold text-gray-900" style="margin:0; line-height:1.2;">Academy Calendar</h1>
+                                    <p class="text-gray-600" style="margin:0;">View and manage calendar events, programs, and schedules across the academy.</p>
                                 </div>
                             </div>
                             <div class="flex items-center space-x-3">
@@ -188,10 +204,10 @@ class NDS_Calendar {
 
                     <!-- Statistics Cards -->
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                        <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                        <div onclick="openStatModal('events')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                             <div class="flex items-center justify-between">
                                 <div>
-                                    <p class="text-sm font-medium text-gray-500">Calendar Events</p>
+                                    <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Calendar Events</p>
                                     <p class="mt-2 text-2xl font-semibold text-gray-900">
                                         <?php echo number_format_i18n($total_events); ?>
                                     </p>
@@ -205,10 +221,10 @@ class NDS_Calendar {
                             </p>
                         </div>
 
-                        <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                        <div onclick="openStatModal('programs')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                             <div class="flex items-center justify-between">
                                 <div>
-                                    <p class="text-sm font-medium text-gray-500">Active Programs</p>
+                                    <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Active Programs</p>
                                     <p class="mt-2 text-2xl font-semibold text-gray-900">
                                         <?php echo number_format_i18n($total_programs); ?>
                                     </p>
@@ -222,10 +238,10 @@ class NDS_Calendar {
                             </p>
                         </div>
 
-                        <div class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between">
+                        <div onclick="openStatModal('schedules')" class="bg-white shadow-sm rounded-xl p-5 border border-gray-100 flex flex-col justify-between hover:bg-gray-50 transition-all duration-200 cursor-pointer group">
                             <div class="flex items-center justify-between">
                                 <div>
-                                    <p class="text-sm font-medium text-gray-500">Course Schedules</p>
+                                    <p class="text-sm font-medium text-gray-500 group-hover:text-gray-700">Course Schedules</p>
                                     <p class="mt-2 text-2xl font-semibold text-gray-900">
                                         <?php echo number_format_i18n($total_schedules); ?>
                                     </p>
@@ -244,7 +260,7 @@ class NDS_Calendar {
                     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
                         <div class="bg-blue-600 px-6 py-4 shadow-md">
                             <h3 class="text-lg font-bold text-white flex items-center">
-                                <i class="fas fa-calendar-check mr-2"></i>Caslendar View
+                                <i class="fas fa-calendar-check mr-2"></i>Calendar View
                             </h3>
                         </div>
 
@@ -558,6 +574,130 @@ class NDS_Calendar {
                 });
             });
         </script>
+                    </div>
+
+                    <!-- Drill-down Stat Modal -->
+                    <div id="drillDownModal" class="hidden" style="position:fixed; inset:0; z-index:999999; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                        <div style="position:fixed; inset:0; background:rgba(0,0,0,0.5);" onclick="closeStatModal()"></div>
+                        <div style="position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:1rem;">
+                            <div style="background:#fff; border-radius:1rem; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); width:100%; max-width:42rem; max-height:80vh; display:flex; flex-direction:column; position:relative;">
+                                <!-- Modal Header -->
+                                <div style="display:flex; align-items:center; justify-content:space-between; padding:1rem 1.5rem; border-bottom:1px solid #e5e7eb;">
+                                    <div style="display:flex; align-items:center; gap:0.75rem;">
+                                        <div id="modalIconBg" style="width:2.5rem; height:2.5rem; border-radius:0.5rem; display:flex; align-items:center; justify-content:center;">
+                                            <i id="modalIcon" style="font-size:1.25rem;"></i>
+                                        </div>
+                                        <div>
+                                            <h3 id="modalTitle" style="font-size:1.125rem; font-weight:700; color:#111827; margin:0;"></h3>
+                                            <p id="modalCount" style="font-size:0.875rem; color:#6b7280; margin:0;"></p>
+                                        </div>
+                                    </div>
+                                    <button onclick="closeStatModal()" style="color:#9ca3af; padding:0.5rem; border-radius:0.5rem; border:none; background:none; cursor:pointer;" onmouseover="this.style.color='#4b5563'; this.style.background='#f3f4f6'" onmouseout="this.style.color='#9ca3af'; this.style.background='none'">
+                                        <i class="fas fa-times" style="font-size:1.25rem;"></i>
+                                    </button>
+                                </div>
+                                <!-- Modal Body -->
+                                <div style="overflow-y:auto; flex:1; padding:0.5rem;">
+                                    <table style="width:100%; border-collapse:collapse;">
+                                        <thead style="background:#f9fafb; position:sticky; top:0; z-index:10;">
+                                            <tr>
+                                                <th id="col1Header" style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; font-weight:500; color:#6b7280; text-transform:uppercase;">Name</th>
+                                                <th id="col2Header" style="padding:0.75rem 1rem; text-align:left; font-size:0.75rem; font-weight:500; color:#6b7280; text-transform:uppercase;">Details</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="modalBody"></tbody>
+                                    </table>
+                                </div>
+                                <!-- Modal Footer -->
+                                <div style="padding:0.75rem 1.5rem; border-top:1px solid #e5e7eb; background:#f9fafb; border-radius:0 0 1rem 1rem; text-align:right;">
+                                    <button onclick="closeStatModal()" style="padding:0.5rem 1rem; font-size:0.875rem; font-weight:500; color:#374151; background:#fff; border:1px solid #d1d5db; border-radius:0.5rem; cursor:pointer;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#fff'">Close</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        const statsData = {
+                            events: <?php echo json_encode($events_list); ?>,
+                            programs: <?php echo json_encode($programs_list); ?>,
+                            schedules: <?php echo json_encode($schedules_list); ?>
+                        };
+
+                        const modalConfig = {
+                            events: {
+                                title: 'Calendar Events',
+                                icon: 'fas fa-calendar-alt',
+                                iconColor: '#2563eb',
+                                iconBg: '#eff6ff',
+                                col1: 'Event Title',
+                                col2: 'Start Date'
+                            },
+                            programs: {
+                                title: 'Active Programs',
+                                icon: 'fas fa-graduation-cap',
+                                iconColor: '#059669',
+                                iconBg: '#ecfdf5',
+                                col1: 'Program Name',
+                                col2: 'Status'
+                            },
+                            schedules: {
+                                title: 'Course Schedules',
+                                icon: 'fas fa-clock',
+                                iconColor: '#7c3aed',
+                                iconBg: '#f5f3ff',
+                                col1: 'Course',
+                                col2: 'Schedule'
+                            }
+                        };
+
+                        window.openStatModal = function(type) {
+                            const modal = document.getElementById('drillDownModal');
+                            const config = modalConfig[type];
+                            const data = statsData[type];
+                            
+                            if (!modal || !config || !data) return;
+
+                            document.getElementById('modalTitle').textContent = config.title;
+                            document.getElementById('modalCount').textContent = data.length + ' item' + (data.length !== 1 ? 's' : '');
+                            document.getElementById('col1Header').textContent = config.col1;
+                            document.getElementById('col2Header').textContent = config.col2;
+                            
+                            const modalIcon = document.getElementById('modalIcon');
+                            const modalIconBg = document.getElementById('modalIconBg');
+                            modalIcon.className = config.icon;
+                            modalIcon.style.color = config.iconColor;
+                            modalIconBg.style.backgroundColor = config.iconBg;
+
+                            const tbody = document.getElementById('modalBody');
+                            tbody.innerHTML = '';
+                            
+                            data.forEach(item => {
+                                const row = document.createElement('tr');
+                                row.style.cssText = 'border-bottom:1px solid #f3f4f6; transition: background 0.15s;';
+                                row.onmouseover = function() { this.style.background = '#f9fafb'; };
+                                row.onmouseout = function() { this.style.background = ''; };
+                                
+                                row.innerHTML = `
+                                    <td style="padding:0.75rem 1rem; font-size:0.875rem; font-weight:600; color:#111827;">${item.name}</td>
+                                    <td style="padding:0.75rem 1rem; font-size:0.875rem; color:#4b5563;">${item.details || 'N/A'}</td>
+                                `;
+                                tbody.appendChild(row);
+                            });
+
+                            modal.classList.remove('hidden');
+                            document.body.style.overflow = 'hidden';
+                        };
+
+                        window.closeStatModal = function() {
+                            const modal = document.getElementById('drillDownModal');
+                            if (modal) {
+                                modal.classList.add('hidden');
+                                document.body.style.overflow = '';
+                            }
+                        };
+                    });
+                    </script>
         <?php
     }
 }

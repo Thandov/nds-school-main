@@ -32,7 +32,7 @@ function nds_education_management_page()
     $edit_id = isset($_GET['edit']) ? intval($_GET['edit']) : 0;
 
 ?>
-    <div class="nds-tailwind-wrapper bg-gray-50 min-h-screen" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <div class="nds-tailwind-wrapper bg-gray-50 pb-12" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin-left: -20px; padding-left: 20px; margin-top: -20px;">
         <?php if ($action === 'list'): ?>
             <!-- Header -->
             <div class="bg-white shadow-sm border-b border-gray-200">

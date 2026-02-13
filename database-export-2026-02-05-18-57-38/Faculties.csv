@@ -1,0 +1,19 @@
+id,faculty_id,program_type_id,code,name,short_name,nqf_level,total_credits,duration_years,accreditation_body_id,status
+1,1,8,HOS-1,"Hospitality Management",International,3,0,,,active
+2,1,8,FOO-1,"Food Preparation and Culinary Arts",QCTO,1,0,,,active
+3,1,8,FOO-1-1,"Food and Beverage Service",QCTO,1,0,,,active
+4,1,8,HOU-1,"Housekeeping Service",QCTO,1,0,,,active
+5,1,8,CUL-1,"Culinary Arts and Supervision",QCTO,1,0,,,active
+6,1,8,PAT-1,"Patisserie and Confectionery",QCTO,1,0,,,active
+7,1,8,BAR-1,Barista,QCTO,1,0,,,active
+8,2,8,HOS-2,"Hospitality Management (Part Time)",QCTO,1,0,,,active
+9,3,8,COO-3,"Cooking Courses",QCTO,1,0,,,active
+10,3,8,CAT-3,"Catering Courses",CATHSETA,2,0,,,active
+11,3,1,BAK-3,"Baking Courses",QCTO,1,0,,,active
+12,3,1,CON-3,"Confectionary Course",QCTO,1,0,,,active
+13,4,1,TRA-4,"Trade test - Artisan Chef",QCTO,1,0,,,active
+14,5,8,OCHEF,"Artisan Chef Program",QCTO,1,0,,,active
+15,6,9,dsvfsf,dvsdfvdsfvdz,International,3,0,,,active
+16,7,10,mio,uionbi8bo98,CATHSETA,2,0,,,active
+17,8,8,tim,timmomo,CATHSETA,2,0,,,active
+52,25,1,DigChef,"Digital Chef",,,,,1,active
