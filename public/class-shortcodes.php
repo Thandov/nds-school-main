@@ -67,20 +67,22 @@ class NDS_Shortcodes {
                 true
             );
             
-            // Custom calendar JS
+            // Custom calendar JS (Unified component)
             wp_enqueue_script(
                 'nds-frontend-calendar',
-                plugin_dir_url(__FILE__) . '../assets/js/frontend-calendar.js',
+                plugin_dir_url(__FILE__) . '../assets/js/admin-calendar.js',
                 array('jquery', 'fullcalendar-js'),
-                filemtime(plugin_dir_path(__FILE__) . '../assets/js/frontend-calendar.js'),
+                filemtime(plugin_dir_path(__FILE__) . '../assets/js/admin-calendar.js'),
                 true
             );
             
-            // Localize script for AJAX
-            wp_localize_script('nds-frontend-calendar', 'ndsFrontendCalendar', array(
+            // Localize script for AJAX (Dual handles for compatibility)
+            $calendar_data = array(
                 'ajaxurl' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('nds_public_calendar_nonce')
-            ));
+            );
+            wp_localize_script('nds-frontend-calendar', 'ndsFrontendCalendar', $calendar_data);
+            wp_localize_script('nds-frontend-calendar', 'ndsCalendar', $calendar_data);
             
             // Enqueue Tailwind CSS if available
             $plugin_dir = plugin_dir_path(__FILE__);

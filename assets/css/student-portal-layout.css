@@ -1,32 +1,35 @@
 /* Remove space left by disabled navbar (adjust height based on your navbar) */
-body.student-portal, .nds-calendar-container {
+body.student-portal,
+.nds-calendar-container {
     margin-top: 0 !important;
     padding-top: 0 !important;
 }
 
-/* Move calendar header to the top */
+/* Calendar header styling */
 .fc-header-toolbar {
-    position: sticky;
-    top: 0;
-    z-index: 1000;
-    background: #fff; /* Ensure visibility over content */
+    z-index: 100;
+    background: #fff;
     border-bottom: 1px solid #ddd;
+    padding: 10px;
 }
 
 /* Adjust main content to account for sticky header if needed */
 .fc-view-container {
-    margin-top: 10px; /* Small gap if header is sticky */
+    margin-top: 10px;
+    /* Small gap if header is sticky */
 }
 
 /* Styles moved from learner-portal.php */
-html, body {
+html,
+body {
     height: 100%;
-    margin: 0;
-    padding: 0;
+    margin: 0 !important;
+    padding: 0 !important;
 }
+
 body.nds-portal-body {
-    margin: 0;
-    padding: 0;
+    margin: 0 !important;
+    padding: 0 !important;
 }
 
 /* Hide website header/navbar completely on portal */
@@ -39,7 +42,8 @@ body.nds-portal-body #masthead,
 body.nds-portal-body .ast-primary-header-bar,
 body.nds-portal-body .site-navigation,
 body.nds-portal-body #header,
-body.nds-portal-body .header {
+body.nds-portal-body .header,
+#wpadminbar {
     display: none !important;
     height: 0 !important;
     margin: 0 !important;
@@ -47,16 +51,23 @@ body.nds-portal-body .header {
     overflow: hidden !important;
 }
 
-/* Remove gap - use margin instead of top */
+/* Force zero offset - hide space above dashboard */
 .nds-portal-offset {
     margin-top: 0 !important;
     padding-top: 0 !important;
 }
-body.admin-bar .nds-portal-offset { 
-    margin-top: 32px !important; 
+
+body.admin-bar .nds-portal-offset,
+body.admin-bar {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
 }
+
 @media screen and (max-width: 782px) {
-    body.admin-bar .nds-portal-offset { 
-        margin-top: 46px !important; 
+
+    body.admin-bar .nds-portal-offset,
+    body.admin-bar {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
     }
 }

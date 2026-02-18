@@ -295,7 +295,7 @@ function nds_fetch_calendar_events_data($enrolled_course_ids = null, $lecturer_i
     $start = isset($_POST['start']) ? sanitize_text_field($_POST['start']) : date('Y-m-d');
     $end = isset($_POST['end']) ? sanitize_text_field($_POST['end']) : date('Y-m-d', strtotime('+1 month'));
     $view_type = isset($_POST['view']) ? sanitize_text_field($_POST['view']) : 'dayGridMonth';
-    $is_year_view = ($view_type === 'dayGridYear');
+    $is_year_view = ($view_type === 'dayGridYear' || $view_type === 'multiMonthYear');
 
     // Optional cohort filter (for student/cohort-specific views)
     $cohort_id = isset($_POST['cohort_id']) ? intval($_POST['cohort_id']) : 0;
@@ -581,6 +581,17 @@ function nds_fetch_calendar_events_data($enrolled_course_ids = null, $lecturer_i
         // Convert schedules to events for the date range
         $start_ts = strtotime($start);
         $end_ts = strtotime($end);
+
+        if (!$start_ts || !$end_ts || $start_ts > $end_ts) {
+            // Safety: if dates are invalid or reversed, return empty or default
+            if ($is_year_view) {
+                // Return empty if we can't determine year range
+                wp_send_json_success(array());
+            } else {
+                // For other views, just stop processing schedules
+                $schedules = array();
+            }
+        }
         
         // Map both full day names and abbreviations to day numbers (0=Sunday, 1=Monday, etc.)
         $day_map = array(

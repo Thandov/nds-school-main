@@ -328,7 +328,7 @@ function nds_course_overview_page_content() {
                                 </h3>
                                 <div class="p-4 bg-blue-50 rounded-lg">
                                     <h4 class="font-semibold text-blue-900 mb-2"><?php echo esc_html($next_course['name']); ?></h4>
-                                    <p class="text-sm text-blue-800 mb-3"><?php echo esc_html($next_course['duration'] ?: 'Duration not specified'); ?></p>
+                                    <p class="text-sm text-blue-800 mb-3"><?php echo esc_html($next_course['duration'] ?? 'Duration not specified'); ?></p>
                                     <a href="<?php echo admin_url('admin.php?page=nds-course-overview&course_id=' . $next_course['id']); ?>" 
                                        class="text-blue-600 hover:text-blue-800 text-sm font-medium">
                                         View Course <i class="fas fa-external-link-alt ml-1"></i>

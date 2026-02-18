@@ -1115,7 +1115,7 @@ function nds_program_template_redirect() {
             true
         );
         
-        // Use unified calendar component for both admin and frontend
+        // Unified calendar component
         $calendar_js_path = plugin_dir_path(__FILE__) . 'assets/js/admin-calendar.js';
         if (file_exists($calendar_js_path)) {
             wp_enqueue_script(
@@ -1126,11 +1126,13 @@ function nds_program_template_redirect() {
                 true
             );
             
-            // Localize script for AJAX (use ndsFrontendCalendar name for compatibility)
-            wp_localize_script('nds-frontend-calendar', 'ndsFrontendCalendar', array(
+            // Localize script for AJAX (use BOTH names for compatibility during migration)
+            $calendar_data = array(
                 'ajaxurl' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('nds_public_calendar_nonce')
-            ));
+            );
+            wp_localize_script('nds-frontend-calendar', 'ndsFrontendCalendar', $calendar_data);
+            wp_localize_script('nds-frontend-calendar', 'ndsCalendar', $calendar_data);
         }
         
         // Enqueue Tailwind CSS if available
@@ -1304,7 +1306,7 @@ add_action('wp_enqueue_scripts', function () {
         true
     );
     
-    // Unified calendar component (works for both admin and frontend)
+    // Unified calendar component
     $calendar_js_path = plugin_dir_path(__FILE__) . 'assets/js/admin-calendar.js';
     if (file_exists($calendar_js_path)) {
         wp_enqueue_script(
@@ -1315,11 +1317,13 @@ add_action('wp_enqueue_scripts', function () {
             true
         );
         
-        // Localize script for AJAX
-        wp_localize_script('nds-frontend-calendar', 'ndsFrontendCalendar', array(
+        // Localize script for AJAX (use BOTH names for compatibility)
+        $calendar_data = array(
             'ajaxurl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('nds_public_calendar_nonce')
-        ));
+        );
+        wp_localize_script('nds-frontend-calendar', 'ndsFrontendCalendar', $calendar_data);
+        wp_localize_script('nds-frontend-calendar', 'ndsCalendar', $calendar_data);
     }
 });
 
@@ -1730,22 +1734,151 @@ function nds_upload_learner_document_ajax() {
         wp_mkdir_p($student_upload_dir);
     }
     
-    // Generate unique filename
-    $document_name = isset($_POST['document_name']) ? sanitize_file_name($_POST['document_name']) : 'document';
-    $unique_filename = sanitize_file_name($document_name) . '_' . time() . '_' . uniqid() . '.' . $file_ext;
+    // Generate unique filename: [student_number]_[initials]_[document_name].[ext]
+    $student_info = nds_get_student($learner_id);
+    $student_number = $student_info->student_number ?? 'STU' . $learner_id;
+    $initials = '';
+    if (!empty($student_info->first_name)) {
+        $initials .= substr($student_info->first_name, 0, 1);
+    }
+    if (!empty($student_info->last_name)) {
+        $initials .= substr($student_info->last_name, 0, 1);
+    }
+    $initials = strtoupper($initials);
+    
+    $document_name_raw = isset($_POST['document_name']) ? sanitize_text_field($_POST['document_name']) : 'document';
+    $document_name_slug = sanitize_file_name($document_name_raw);
+    
+    $unique_filename = $student_number . '_' . $initials . '_' . $document_name_slug . '_' . time() . '.' . $file_ext;
     $dest_path = $student_upload_dir . $unique_filename;
     
     if (!move_uploaded_file($file['tmp_name'], $dest_path)) {
         wp_send_json_error('Failed to save file');
     }
     
-    // Store document info in database (you may want to create a documents table)
-    // For now, we'll just return success - you can extend this to store metadata
+    // Store document info in database
     $relative_path = 'Students/' . $current_year . '/' . $student_folder_name . '/' . $unique_filename;
+    $category = isset($_POST['document_category']) ? sanitize_text_field($_POST['document_category']) : 'other';
+    
+    // Map categories to document_type ENUM
+    $doc_type_map = [
+        'application' => 'other', // application_documents table exists, but we use this for general uploads
+        'academic'    => 'academic_record',
+        'financial'   => 'other',
+        'other'       => 'other'
+    ];
+    $doc_type = $doc_type_map[$category] ?? 'other';
+
+    // We need an application_id if we want to use nds_application_documents. 
+    // Usually students have an application record.
+    $application = $wpdb->get_row($wpdb->prepare(
+        "SELECT id FROM {$wpdb->prefix}nds_applications WHERE student_id = %d ORDER BY created_at DESC LIMIT 1",
+        $learner_id
+    ));
+
+    if ($application) {
+        $wpdb->insert(
+            $wpdb->prefix . 'nds_application_documents',
+            [
+                'application_id' => $application->id,
+                'document_type'  => $doc_type,
+                'file_name'      => $document_name_raw,
+                'file_path'      => $relative_path,
+                'file_size'      => $file['size'],
+                'mime_type'      => $file['type'],
+                'uploaded_by'    => get_current_user_id(),
+                'uploaded_at'    => current_time('mysql')
+            ],
+            ['%d', '%s', '%s', '%s', '%d', '%s', '%d', '%s']
+        );
+    }
     
     wp_send_json_success([
         'message' => 'Document uploaded successfully',
         'path' => $relative_path,
         'filename' => $unique_filename
     ]);
+}
+
+// AJAX handler for removing learner documents
+add_action('wp_ajax_nds_remove_learner_document', 'nds_remove_learner_document_ajax');
+function nds_remove_learner_document_ajax() {
+    if (!is_user_logged_in()) {
+        wp_send_json_error('Unauthorized', 401);
+    }
+    
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'nds_remove_learner_document')) {
+        wp_send_json_error('Security check failed', 403);
+    }
+    
+    $learner_id = isset($_POST['learner_id']) ? intval($_POST['learner_id']) : 0;
+    $doc_label = isset($_POST['document_name']) ? sanitize_text_field($_POST['document_name']) : '';
+    
+    if ($learner_id <= 0 || empty($doc_label)) {
+        wp_send_json_error('Invalid parameters');
+    }
+    
+    // Authorization check
+    $current_student_id = nds_portal_get_current_student_id();
+    if ($current_student_id > 0 && $current_student_id !== $learner_id) {
+        wp_send_json_error('Unauthorized');
+    }
+    if ($current_student_id <= 0 && !current_user_can('manage_options')) {
+        wp_send_json_error('Unauthorized');
+    }
+    
+    global $wpdb;
+    
+    // Mapping for application form fields
+    $required_docs_mapping = [
+        'ID/Passport (Applicant)' => 'id_passport_applicant',
+        'ID/Passport (Responsible Person)' => 'id_passport_responsible',
+        'SAQA Certificate' => 'saqa_certificate',
+        'Study Permit' => 'study_permit',
+        'Parent/Spouse ID' => 'parent_spouse_id',
+        'Latest Results' => 'latest_results',
+        'Proof of Residence' => 'proof_residence',
+        'Highest Grade Certificate' => 'highest_grade_cert',
+        'Proof of Medical Aid' => 'proof_medical_aid'
+    ];
+    
+    $removed = false;
+    
+    // 1. Check if it's a field in application_forms
+    if (isset($required_docs_mapping[$doc_label])) {
+        $field_name = $required_docs_mapping[$doc_label];
+        $student = nds_get_student($learner_id);
+        if ($student && !empty($student->email)) {
+            $wpdb->update(
+                $wpdb->prefix . 'nds_application_forms',
+                [$field_name => ''],
+                ['email' => $student->email],
+                ['%s'],
+                ['%s']
+            );
+            $removed = true;
+        }
+    }
+    
+    // 2. Also remove from application_documents table if it exists there
+    $app_ids = $wpdb->get_col($wpdb->prepare(
+        "SELECT id FROM {$wpdb->prefix}nds_applications WHERE student_id = %d",
+        $learner_id
+    ));
+    
+    if (!empty($app_ids)) {
+        foreach ($app_ids as $app_id) {
+            $wpdb->delete(
+                $wpdb->prefix . 'nds_application_documents',
+                ['application_id' => $app_id, 'file_name' => $doc_label]
+            );
+        }
+        $removed = true;
+    }
+    
+    if ($removed) {
+        wp_send_json_success('Document removed successfully');
+    } else {
+        wp_send_json_error('Document not found or could not be removed');
+    }
 }
