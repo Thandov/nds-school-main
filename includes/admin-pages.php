@@ -19,6 +19,7 @@ require_once plugin_dir_path(__FILE__) . 'applicants-management.php';
 require_once plugin_dir_path(__FILE__) . 'calendar-functions.php';
 require_once plugin_dir_path(__FILE__) . 'learner-dashboard.php';
 require_once plugin_dir_path(__FILE__) . 'components/course-enrollments.php';
+require_once plugin_dir_path(__FILE__) . 'courses-tailwind.php';
 
 // AJAX handler for enrolling student in program (enrolls in all courses)
 add_action('wp_ajax_nds_enroll_student_program', 'nds_ajax_enroll_student_program');
@@ -330,7 +331,18 @@ function nds_ajax_enroll_student_course() {
         wp_send_json_error('Active academic year or semester not set');
     }
     
-    // Check if already enrolled
+    // STRICT RULE: Enforce that each student can only be enrolled in one qualification at a time.
+    $active_enrollments_count = $wpdb->get_var($wpdb->prepare(
+        "SELECT COUNT(*) FROM {$wpdb->prefix}nds_student_enrollments 
+         WHERE student_id = %d AND status IN ('enrolled', 'applied', 'waitlisted')",
+        $student_id
+    ));
+    
+    if ($active_enrollments_count > 0) {
+        wp_send_json_error('A student can only be enrolled in one qualification at a time.');
+    }
+
+    // Check if already enrolled in this specific course (redundant but safe)
     $existing = $wpdb->get_var($wpdb->prepare(
         "SELECT id FROM {$wpdb->prefix}nds_student_enrollments 
          WHERE student_id = %d AND course_id = %d AND academic_year_id = %d AND semester_id = %d",
@@ -449,6 +461,87 @@ function nds_handle_unenroll_student() {
         wp_redirect(admin_url('admin.php?page=nds-learner-dashboard&id=' . $student_id . '&tab=courses&error=unenroll_failed'));
     }
     exit;
+}
+
+// AJAX handler for saving module enrollments
+add_action('wp_ajax_nds_save_module_enrollments', 'nds_ajax_save_module_enrollments');
+function nds_ajax_save_module_enrollments() {
+    check_ajax_referer('nds_save_module_enrollments', 'nonce');
+    
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('Unauthorized');
+    }
+    
+    $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0;
+    // Decode json array of module IDs
+    $module_ids_json = isset($_POST['module_ids']) ? stripslashes($_POST['module_ids']) : '[]';
+    $module_ids = json_decode($module_ids_json, true) ?: [];
+    
+    if (!$student_id) {
+        wp_send_json_error('Invalid student ID');
+    }
+    
+    global $wpdb;
+    $modules_table = $wpdb->prefix . 'nds_student_modules';
+    
+    // Get active academic year and semester
+    $active_year = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}nds_academic_years WHERE is_active = 1 ORDER BY id DESC LIMIT 1", ARRAY_A);
+    $active_semester = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}nds_semesters WHERE is_active = 1 ORDER BY id DESC LIMIT 1", ARRAY_A);
+    
+    if (!$active_year || !$active_semester) {
+        wp_send_json_error('Active academic year or semester not set');
+    }
+    
+    // Start transaction
+    $wpdb->query("START TRANSACTION");
+    
+    try {
+        // Clear all existing module enrollments for this student in current academic term
+        $wpdb->delete(
+            $modules_table,
+            [
+                'student_id' => $student_id,
+                'academic_year_id' => $active_year['id'],
+                'semester_id' => $active_semester['id']
+            ],
+            ['%d', '%d', '%d']
+        );
+        
+        // Ensure array of integers
+        $module_ids = array_map('intval', $module_ids);
+        
+        $inserted_count = 0;
+        foreach ($module_ids as $module_id) {
+            if ($module_id <= 0) continue;
+            
+            $result = $wpdb->insert(
+                $modules_table,
+                [
+                    'student_id' => $student_id,
+                    'module_id' => $module_id,
+                    'academic_year_id' => $active_year['id'],
+                    'semester_id' => $active_semester['id'],
+                    'status' => 'enrolled',
+                    'created_at' => current_time('mysql')
+                ],
+                ['%d', '%d', '%d', '%d', '%s', '%s']
+            );
+            
+            if ($result) {
+                $inserted_count++;
+            }
+        }
+        
+        $wpdb->query("COMMIT");
+        wp_send_json_success([
+            'message' => 'Module enrollments updated successfully',
+            'count' => $inserted_count
+        ]);
+        
+    } catch (Exception $e) {
+        $wpdb->query("ROLLBACK");
+        wp_send_json_error('Database error: ' . $e->getMessage());
+    }
 }
 
 // Main NDS Academy Dashboard
@@ -877,6 +970,27 @@ function course_form($typ, $course = null, $program_id = null, $url = null, $mod
             </div>
         </div>
 
+        <!-- Qualification Modules Section -->
+        <?php
+        // Get existing modules for this course
+        $modules = [];
+        if (isset($course) && isset($course->id)) {
+            $modules = $wpdb->get_results($wpdb->prepare(
+                "SELECT * FROM {$wpdb->prefix}nds_modules WHERE course_id = %d ORDER BY code ASC",
+                $course->id
+            ));
+        }
+
+        // Include module fields component
+        $module_fields_path = plugin_dir_path(__FILE__) . 'partials/module-fields.php';
+        if (file_exists($module_fields_path)) {
+            require_once $module_fields_path;
+            if (function_exists('nds_render_module_fields')) {
+                nds_render_module_fields(['modules' => $modules, 'prefix' => 'modules']);
+            }
+        }
+        ?>
+
         <!-- Schedule / Timetable Section -->
         <fieldset class="space-y-4 mt-6">
             <legend class="text-lg font-semibold text-gray-700">Qualification Schedule / Timetable</legend>
@@ -926,13 +1040,14 @@ function course_form($typ, $course = null, $program_id = null, $url = null, $mod
             
             // Include schedule fields component
             require_once plugin_dir_path(__FILE__) . 'partials/schedule-fields.php';
-            if (function_exists('nds_render_schedule_fields')) {
+                if (function_exists('nds_render_schedule_fields')) {
                 $course_id_for_schedules = isset($course) && isset($course->id) ? intval($course->id) : 0;
                 nds_render_schedule_fields([
                     'lecturers' => $staff ?? [],
                     'prefix' => 'schedule',
                     'course_id' => $course_id_for_schedules,
-                    'default_lecturer_id' => $first_lecturer_id
+                    'default_lecturer_id' => $first_lecturer_id,
+                    'modules' => $modules ?? []
                 ]);
             }
             ?>
@@ -1348,7 +1463,7 @@ function nds_edit_student_page() {
         wp_die('Unauthorized');
     }
     
-    $student_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+    $student_id = isset($_GET['id']) ? intval($_GET['id']) : (isset($_GET['edit_student']) ? intval($_GET['edit_student']) : 0);
     if (!$student_id) {
         wp_die('Invalid student ID');
     }
@@ -1518,6 +1633,35 @@ function nds_student_form($action, $student = null) {
                 <span class="text-gray-900 font-medium"><?php echo $is_edit ? 'Edit Student' : 'Add New Student'; ?></span>
             </nav>
         </div>
+        
+        <!-- Success/Error Messages -->
+        <?php if (isset($_GET['success']) && $_GET['success'] === 'student_updated'): ?>
+            <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+                <div class="bg-green-50 border border-green-200 rounded-md p-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-check-circle text-green-400"></i>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm font-medium text-green-800">Student updated successfully!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <?php elseif (isset($_GET['error']) && $_GET['error'] === 'update_failed'): ?>
+            <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+                <div class="bg-red-50 border border-red-200 rounded-md p-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-exclamation-circle text-red-400"></i>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm font-medium text-red-800">Failed to update student. Please try again.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
         
         <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
         <form method="POST" action="<?php echo admin_url('admin-post.php'); ?>" id="student-multistep-form" onsubmit="return validateFinalStep()">

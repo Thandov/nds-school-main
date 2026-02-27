@@ -585,6 +585,21 @@ function nds_courses_page_tailwind()
                         case 'missing_fields':
                             echo 'Please fill in all required fields.';
                             break;
+                        case 'create_failed':
+                            echo 'Failed to create module.';
+                            if (isset($_GET['db_error'])) {
+                                echo ' Database error: ' . esc_html(urldecode($_GET['db_error']));
+                            }
+                            break;
+                        case 'duplicate_code':
+                            echo 'A module with this code already exists. Please use a unique code.';
+                            break;
+                        case 'invalid_course':
+                            echo 'The selected course does not exist. Please refresh the page and try again.';
+                            break;
+                        case 'table_missing':
+                            echo 'Database table is missing. Please contact the administrator.';
+                            break;
                         case 'delete_failed':
                             echo 'Failed to delete qualification. Please check the error logs.';
                             break;
@@ -1006,7 +1021,7 @@ function nds_courses_page_tailwind()
                     <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
                         <div class="flex items-center">
                             <span class="dashicons dashicons-plus-alt2 text-blue-600 mr-3 text-xl"></span>
-                            <h2 class="text-xl font-semibold text-gray-900">Add New Qualification</h2>
+                            <h2 class="text-xl font-semibold text-gray-900">Add New Module</h2>
                         </div>
                         <button type="button" onclick="closeModal()" class="text-gray-400 hover:text-gray-600 transition-colors p-2 rounded-lg hover:bg-gray-100">
                             <span class="dashicons dashicons-no-alt text-xl"></span>
@@ -1131,7 +1146,7 @@ function nds_courses_page_tailwind()
             </div>
         </div>
 
-        <!-- Add Module Modal -->
+        <!-- Add Module Modal - FIXED VERSION -->
         <div id="addModuleModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000;" onclick="if(event.target === this) closeModuleModal();">
             <div class="flex items-center justify-center min-h-screen p-4">
                 <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation();">
@@ -1145,10 +1160,11 @@ function nds_courses_page_tailwind()
                         </button>
                     </div>
                     <div class="p-6">
-                        <form method="POST" action="<?php echo admin_url('admin-post.php'); ?>">
+                        <form id="addModuleForm" method="POST" action="<?php echo admin_url('admin-post.php'); ?>">
                             <?php wp_nonce_field('nds_add_module_nonce', 'nds_add_module_nonce'); ?>
                             <input type="hidden" name="action" value="nds_add_module">
                             <input type="hidden" name="course_id" id="module_course_id" value="">
+                            <input type="hidden" name="program_id" value="<?php echo esc_attr($filter_program_id); ?>">
 
                             <div class="space-y-6">
                                 <div>
@@ -1212,7 +1228,7 @@ function nds_courses_page_tailwind()
                                     class="px-6 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors">
                                     Cancel
                                 </button>
-                                <button type="submit"
+                                <button type="submit" id="submitModuleBtn"
                                     class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 font-medium shadow-md hover:shadow-lg">
                                     Add Module
                                 </button>
@@ -1252,17 +1268,26 @@ function nds_courses_page_tailwind()
                 if (modal) {
                     modal.style.display = 'none';
                     document.body.style.overflow = '';
+                    // Reset form
+                    const form = document.getElementById('addModuleForm');
+                    if (form) form.reset();
                 }
             }
 
             function openAddModuleModal(courseId, courseName) {
+                console.log('Opening module modal for course:', courseId, courseName);
+                
+                // Set the values
                 document.getElementById('module_course_id').value = courseId;
                 document.getElementById('selected_course_name').textContent = courseName;
                 
+                // Show the modal
                 const modal = document.getElementById('addModuleModal');
                 if (modal) {
                     modal.style.display = 'block';
                     document.body.style.overflow = 'hidden';
+                } else {
+                    console.error('Module modal not found');
                 }
             }
 
@@ -1330,6 +1355,33 @@ function nds_courses_page_tailwind()
                         submitBtn.disabled = true;
                     });
                 }
+
+                // Handle module form submission
+                const moduleForm = document.getElementById('addModuleForm');
+                if (moduleForm) {
+                    moduleForm.addEventListener('submit', function(e) {
+                        const courseId = document.getElementById('module_course_id').value;
+                        const moduleName = document.getElementById('module_name').value;
+                        const moduleDuration = document.getElementById('module_duration').value;
+                        
+                        if (!courseId) {
+                            e.preventDefault();
+                            alert('Course ID is missing. Please try again.');
+                            return false;
+                        }
+                        
+                        if (!moduleName || !moduleDuration) {
+                            e.preventDefault();
+                            alert('Please fill in all required fields.');
+                            return false;
+                        }
+                        
+                        // Show loading state
+                        const submitBtn = document.getElementById('submitModuleBtn');
+                        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Adding...';
+                        submitBtn.disabled = true;
+                    });
+                }
             });
         </script>
     </div>
@@ -1338,30 +1390,105 @@ function nds_courses_page_tailwind()
 
 // Add this function to handle module creation via admin-post.php
 function nds_handle_add_module() {
+    // Log for debugging
+    error_log('========== NDS ADD MODULE HANDLER STARTED ==========');
+    error_log('REQUEST METHOD: ' . $_SERVER['REQUEST_METHOD']);
+    error_log('POST DATA: ' . print_r($_POST, true));
+    
+    // Check user capabilities
     if (!current_user_can('manage_options')) {
-        wp_die('Unauthorized');
+        error_log('NDS Add Module: Unauthorized access attempt');
+        wp_die('Unauthorized access. You do not have permission to perform this action.', 'Unauthorized', array('response' => 403));
     }
     
+    // Verify nonce
     if (!isset($_POST['nds_add_module_nonce']) || !wp_verify_nonce($_POST['nds_add_module_nonce'], 'nds_add_module_nonce')) {
-        wp_die('Security check failed');
+        error_log('NDS Add Module: Nonce verification failed');
+        $redirect_url = admin_url('admin.php?page=nds-courses&error=security_failed');
+        if (isset($_POST['program_id']) && !empty($_POST['program_id'])) {
+            $redirect_url = add_query_arg('program_id', intval($_POST['program_id']), $redirect_url);
+        }
+        wp_redirect($redirect_url);
+        exit;
     }
     
     global $wpdb;
     $table_modules = $wpdb->prefix . 'nds_modules';
     
-    $course_id = intval($_POST['course_id']);
-    $module_name = sanitize_text_field($_POST['module_name']);
-    $module_code = sanitize_text_field($_POST['module_code']);
-    $module_duration = intval($_POST['module_duration']);
-    $module_description = sanitize_textarea_field($_POST['module_description']);
-    $module_status = sanitize_text_field($_POST['module_status']);
+    // Check if table exists, if not create it
+    if ($wpdb->get_var("SHOW TABLES LIKE '$table_modules'") != $table_modules) {
+        error_log('NDS Add Module: Table does not exist, creating: ' . $table_modules);
+        
+        $charset_collate = $wpdb->get_charset_collate();
+        $sql = "CREATE TABLE $table_modules (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            code VARCHAR(20) DEFAULT NULL,
+            name VARCHAR(255) NOT NULL,
+            course_id INT NOT NULL,
+            type ENUM('theory','practical','workplace','assessment') DEFAULT 'theory',
+            duration_hours INT,
+            description TEXT,
+            status ENUM('active','inactive','draft') DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_course (course_id),
+            INDEX idx_code (code),
+            INDEX idx_type (type)
+        ) $charset_collate;";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        // Check if table was created
+        if ($wpdb->get_var("SHOW TABLES LIKE '$table_modules'") != $table_modules) {
+            error_log('NDS Add Module: Failed to create table');
+            $redirect_url = admin_url('admin.php?page=nds-courses&error=table_missing');
+            if (isset($_POST['program_id']) && !empty($_POST['program_id'])) {
+                $redirect_url = add_query_arg('program_id', intval($_POST['program_id']), $redirect_url);
+            }
+            wp_redirect($redirect_url);
+            exit;
+        }
+    }
     
+    // Get form data
+    $course_id = isset($_POST['course_id']) ? intval($_POST['course_id']) : 0;
+    $module_name = isset($_POST['module_name']) ? sanitize_text_field($_POST['module_name']) : '';
+    $module_code = isset($_POST['module_code']) ? sanitize_text_field($_POST['module_code']) : '';
+    $module_duration = isset($_POST['module_duration']) ? intval($_POST['module_duration']) : 0;
+    $module_description = isset($_POST['module_description']) ? sanitize_textarea_field($_POST['module_description']) : '';
+    $module_status = isset($_POST['module_status']) ? sanitize_text_field($_POST['module_status']) : 'active';
+    
+    error_log('NDS Add Module: course_id=' . $course_id . ', name=' . $module_name . ', code=' . $module_code . ', duration=' . $module_duration);
+    
+    // Validate required fields
     if (empty($module_name) || empty($module_duration) || empty($course_id)) {
-        $redirect_url = add_query_arg('error', 'missing_fields', admin_url('admin.php?page=nds-courses'));
+        error_log('NDS Add Module: Missing required fields');
+        $redirect_url = admin_url('admin.php?page=nds-courses&error=missing_fields');
+        if (isset($_POST['program_id']) && !empty($_POST['program_id'])) {
+            $redirect_url = add_query_arg('program_id', intval($_POST['program_id']), $redirect_url);
+        }
         wp_redirect($redirect_url);
         exit;
     }
     
+    // Check if course exists
+    $course_exists = $wpdb->get_var($wpdb->prepare(
+        "SELECT id FROM {$wpdb->prefix}nds_courses WHERE id = %d", 
+        $course_id
+    ));
+    
+    if (!$course_exists) {
+        error_log('NDS Add Module: Course does not exist: ' . $course_id);
+        $redirect_url = admin_url('admin.php?page=nds-courses&error=invalid_course');
+        if (isset($_POST['program_id']) && !empty($_POST['program_id'])) {
+            $redirect_url = add_query_arg('program_id', intval($_POST['program_id']), $redirect_url);
+        }
+        wp_redirect($redirect_url);
+        exit;
+    }
+    
+    // Insert the module
     $result = $wpdb->insert(
         $table_modules,
         array(
@@ -1377,19 +1504,36 @@ function nds_handle_add_module() {
         array('%d', '%s', '%s', '%d', '%s', '%s', '%s', '%s')
     );
     
-    if ($result) {
-        $redirect_url = add_query_arg('module_created', 'success', admin_url('admin.php?page=nds-courses'));
-        if (isset($_GET['program_id'])) {
-            $redirect_url = add_query_arg('program_id', intval($_GET['program_id']), $redirect_url);
-        }
-    } else {
-        $redirect_url = add_query_arg('error', 'create_failed', admin_url('admin.php?page=nds-courses'));
+    error_log('NDS Add Module Insert Result: ' . ($result ? 'success' : 'failed') . ', Last Error: ' . $wpdb->last_error);
+    
+    // Prepare redirect URL
+    $redirect_url = admin_url('admin.php?page=nds-courses');
+    
+    // Add program_id to redirect if present
+    if (isset($_POST['program_id']) && !empty($_POST['program_id'])) {
+        $redirect_url = add_query_arg('program_id', intval($_POST['program_id']), $redirect_url);
     }
     
+    if ($result === false) {
+        // Check for duplicate key error
+        if ($wpdb->last_error && strpos($wpdb->last_error, 'Duplicate entry') !== false) {
+            $redirect_url = add_query_arg('error', 'duplicate_code', $redirect_url);
+        } else {
+            $redirect_url = add_query_arg('error', 'create_failed', $redirect_url);
+            if ($wpdb->last_error) {
+                $redirect_url = add_query_arg('db_error', urlencode($wpdb->last_error), $redirect_url);
+            }
+        }
+    } else {
+        $redirect_url = add_query_arg('module_created', 'success', $redirect_url);
+    }
+    
+    error_log('NDS Add Module: Redirecting to: ' . $redirect_url);
     wp_redirect($redirect_url);
     exit;
 }
 add_action('admin_post_nds_add_module', 'nds_handle_add_module');
+add_action('admin_post_nopriv_nds_add_module', 'nds_handle_add_module'); // Add this for logged out users (though they shouldn't have access)
 
 // NOTE: nds_assign_lecturer_to_course() and nds_unassign_lecturer_from_course() 
 // are already defined in staff-functions.php - we're not redeclaring them here

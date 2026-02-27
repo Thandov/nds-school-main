@@ -132,6 +132,146 @@ function nds_add_schedule() {
 }
 
 /**
+ * Update existing schedule
+ */
+add_action('admin_post_nds_update_schedule', 'nds_update_schedule');
+function nds_update_schedule() {
+    // Check nonce and permissions
+    if (!isset($_POST['nds_update_schedule_nonce']) || !wp_verify_nonce($_POST['nds_update_schedule_nonce'], 'nds_update_schedule_nonce')) {
+        wp_die('Security check failed');
+    }
+    
+    if (!current_user_can('manage_options')) {
+        wp_die('Unauthorized');
+    }
+
+    global $wpdb;
+    $schedules_table = $wpdb->prefix . 'nds_course_schedules';
+    
+    $schedule_id = intval($_POST['schedule_id'] ?? 0);
+    $course_id = intval($_POST['course_id'] ?? 0);
+    
+    if (!$schedule_id || !$course_id) {
+        wp_redirect(add_query_arg('error', 'invalid_data', wp_get_referer()));
+        exit;
+    }
+    
+    // Get old schedule data for comparison
+    $old_schedule = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM {$schedules_table} WHERE id = %d",
+        $schedule_id
+    ), ARRAY_A);
+    
+    if (!$old_schedule) {
+        wp_redirect(add_query_arg('error', 'schedule_not_found', wp_get_referer()));
+        exit;
+    }
+    
+    $data = nds_handle_schedule_data('POST');
+    
+    // Validate required fields
+    if (empty($data['course_id']) || empty($data['days']) || empty($data['start_time']) || empty($data['end_time'])) {
+        wp_redirect(add_query_arg('error', 'missing_fields', wp_get_referer()));
+        exit;
+    }
+    
+    // Calculate day hours if needed
+    $start = strtotime($data['start_time']);
+    $end = strtotime($data['end_time']);
+    $day_hours = ($end - $start) / 3600; // Convert seconds to hours
+    $data['day_hours'] = round($day_hours, 2);
+    
+    // Update the schedule
+    $result = $wpdb->update(
+        $schedules_table,
+        $data,
+        ['id' => $schedule_id],
+        [
+            '%d', // course_id
+            '%d', // lecturer_id
+            '%s', // days
+            '%s', // start_time
+            '%s', // end_time
+            '%s', // location
+            '%s', // session_type
+            '%d', // is_active
+            '%f', // day_hours
+            '%d', // cohort_id
+            '%s', // pattern_type
+            '%s', // pattern_meta
+            '%s', // valid_from
+            '%s', // valid_to
+        ],
+        ['%d']
+    );
+    
+    if ($result === false) {
+        wp_redirect(add_query_arg('error', 'db_error', wp_get_referer()));
+        exit;
+    }
+    
+    // Send notifications if there are changes
+    if (function_exists('nds_check_schedule_changes_and_notify')) {
+        $old_sched_by_module = [];
+        $new_sched_by_module = [];
+        
+        // Only track if this is a module-specific schedule
+        if (!empty($data['module_id'])) {
+            $old_sched_by_module[$data['module_id']] = $old_schedule;
+            $new_sched_by_module[$data['module_id']] = $data;
+            
+            nds_check_schedule_changes_and_notify($course_id, $old_sched_by_module, $new_sched_by_module);
+        } else {
+            // Course-level schedule - notify all students
+            $course_name = $wpdb->get_var($wpdb->prepare(
+                "SELECT name FROM {$wpdb->prefix}nds_courses WHERE id = %d",
+                $course_id
+            ));
+            
+            if ($course_name) {
+                $changes = [];
+                
+                if ($old_schedule['start_time'] !== $data['start_time']) {
+                    $old_time = date('H:i', strtotime($old_schedule['start_time']));
+                    $new_time = date('H:i', strtotime($data['start_time']));
+                    $changes[] = sprintf("Start time changed: %s → %s", $old_time, $new_time);
+                }
+                if ($old_schedule['end_time'] !== $data['end_time']) {
+                    $old_time = date('H:i', strtotime($old_schedule['end_time']));
+                    $new_time = date('H:i', strtotime($data['end_time']));
+                    $changes[] = sprintf("End time changed: %s → %s", $old_time, $new_time);
+                }
+                if ($old_schedule['days'] !== $data['days']) {
+                    $changes[] = sprintf("Days changed: %s → %s", $old_schedule['days'], $data['days']);
+                }
+                if (($old_schedule['location'] ?? '') !== ($data['location'] ?? '')) {
+                    $old_loc = $old_schedule['location'] ?: 'Not set';
+                    $new_loc = $data['location'] ?: 'Not set';
+                    $changes[] = sprintf("Location changed: %s → %s", $old_loc, $new_loc);
+                }
+                
+                if (!empty($changes)) {
+                    nds_notify_enrolled_students(
+                        $course_id,
+                        'Schedule Updated: ' . $course_name,
+                        'The course schedule has been updated:\n\n' . implode("\n", $changes) . '\n\nPlease check your timetable for details.',
+                        'timetable'
+                    );
+                }
+            }
+        }
+    }
+    
+    // Clear calendar cache
+    if (function_exists('nds_clear_calendar_cache')) {
+        nds_clear_calendar_cache();
+    }
+    
+    wp_redirect(add_query_arg('success', 'schedule_updated', wp_get_referer()));
+    exit;
+}
+
+/**
  * Get all schedules
  */
 function nds_get_schedules($filters = []) {
@@ -490,9 +630,12 @@ function nds_fetch_calendar_events_data($enrolled_course_ids = null, $lecturer_i
                    c.name as course_name,
                    c.code as course_code,
                    c.color as course_color,
+                   m.name as module_name,
+                   m.code as module_code,
                    st.first_name, st.last_name
             FROM {$schedules_table} s
             LEFT JOIN {$courses_table} c ON s.course_id = c.id
+            LEFT JOIN {$wpdb->prefix}nds_modules m ON s.module_id = m.id
             LEFT JOIN {$staff_table} st ON s.lecturer_id = st.id
             WHERE s.is_active = 1
             {$cohort_condition}
@@ -716,9 +859,16 @@ function nds_fetch_calendar_events_data($enrolled_course_ids = null, $lecturer_i
                                 $extra_end   = !empty($ex['new_end_time']) ? $event_date . ' ' . $ex['new_end_time'] : $end_datetime;
                                 $extra_location = !empty($ex['new_location']) ? $ex['new_location'] : $base_location;
 
+                                $event_title = $schedule['course_name'];
+                                if (!empty($schedule['module_code'])) {
+                                    $event_title .= ' - ' . $schedule['module_code'];
+                                } elseif (!empty($schedule['course_code'])) {
+                                    $event_title .= ' (' . $schedule['course_code'] . ')';
+                                }
+
                                 $extra_events[] = array(
                                     'id' => 'schedule_' . $schedule['id'] . '_' . $event_date . '_extra_' . $ex['id'],
-                                    'title' => $schedule['course_name'] . ($schedule['course_code'] ? ' (' . $schedule['course_code'] . ')' : ''),
+                                    'title' => $event_title,
                                     'start' => $extra_start,
                                     'end' => $extra_end,
                                     'allDay' => false,
@@ -730,6 +880,8 @@ function nds_fetch_calendar_events_data($enrolled_course_ids = null, $lecturer_i
                                         'location' => $extra_location,
                                         'schedule_id' => $schedule['id'],
                                         'exception_id' => $ex['id'],
+                                        'module_name' => $schedule['module_name'] ?? '',
+                                        'module_code' => $schedule['module_code'] ?? '',
                                     )
                                 );
                                 break;
@@ -739,9 +891,16 @@ function nds_fetch_calendar_events_data($enrolled_course_ids = null, $lecturer_i
                     // Add main event unless it's been cancelled by an exception
                     // Skip individual schedules in year view - only show grouped courses
                     if (!$cancel_main_event && !$is_year_view) {
+                        $event_title = $schedule['course_name'];
+                        if (!empty($schedule['module_code'])) {
+                            $event_title .= ' - ' . $schedule['module_code'];
+                        } elseif (!empty($schedule['course_code'])) {
+                            $event_title .= ' (' . $schedule['course_code'] . ')';
+                        }
+
                         $events[] = array(
                             'id' => 'schedule_' . $schedule['id'] . '_' . $event_date,
-                            'title' => $schedule['course_name'] . ($schedule['course_code'] ? ' (' . $schedule['course_code'] . ')' : ''),
+                            'title' => $event_title,
                             'start' => $start_datetime,
                             'end' => $end_datetime,
                             'allDay' => false,
@@ -752,6 +911,8 @@ function nds_fetch_calendar_events_data($enrolled_course_ids = null, $lecturer_i
                                 'lecturer' => trim(($schedule['first_name'] ?? '') . ' ' . ($schedule['last_name'] ?? '')),
                                 'location' => $base_location,
                                 'schedule_id' => $schedule['id'],
+                                'module_name' => $schedule['module_name'] ?? '',
+                                'module_code' => $schedule['module_code'] ?? '',
                             )
                         );
                     }

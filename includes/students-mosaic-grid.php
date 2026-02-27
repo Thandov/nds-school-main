@@ -405,11 +405,11 @@ function nds_students_mosaic_grid_page() {
 
     <script>
     function viewStudentDetails(studentId) {
-        window.location.href = '<?php echo admin_url('admin.php?page=nds-edit-learner&edit_student='); ?>' + studentId;
+        window.location.href = '<?php echo admin_url('admin.php?page=nds-edit-learner&id='); ?>' + studentId;
     }
 
     function editStudent(studentId) {
-        window.location.href = '<?php echo admin_url('admin.php?page=nds-edit-learner&edit_student='); ?>' + studentId;
+        window.location.href = '<?php echo admin_url('admin.php?page=nds-edit-learner&id='); ?>' + studentId;
     }
     </script>
     <?php

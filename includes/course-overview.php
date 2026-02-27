@@ -296,6 +296,86 @@ function nds_course_overview_page_content() {
                             </div>
                         </div>
                     </div>
+
+                    <!-- Modules Section -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-6">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="text-xl font-bold text-gray-900 flex items-center">
+                                <i class="fas fa-book text-green-600 mr-3"></i>Course Modules
+                                <span class="ml-2 bg-green-100 text-green-800 text-sm font-medium px-2 py-1 rounded-full">
+                                    <?php
+                                    $modules_count = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$wpdb->prefix}nds_modules WHERE course_id = %d AND status = 'active'", $course_id));
+                                    echo intval($modules_count);
+                                    ?>
+                                </span>
+                            </h3>
+                            <button onclick="openAddModuleModal(<?php echo $course_id; ?>, '<?php echo esc_js($course['name']); ?>')" class="button button-primary bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                                <i class="fas fa-plus mr-2"></i>Add Module
+                            </button>
+                        </div>
+
+                        <div class="modules-list">
+                            <?php
+                            $modules = $wpdb->get_results($wpdb->prepare("
+                                SELECT * FROM {$wpdb->prefix}nds_modules
+                                WHERE course_id = %d AND status = 'active'
+                                ORDER BY name ASC
+                            ", $course_id), ARRAY_A);
+
+                            if (!empty($modules)):
+                            ?>
+                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <?php foreach ($modules as $module): ?>
+                                        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                                            <div class="flex items-start justify-between mb-3">
+                                                <div class="flex-1">
+                                                    <h4 class="font-semibold text-gray-900 mb-1"><?php echo esc_html($module['name']); ?></h4>
+                                                    <p class="text-sm text-gray-600 mb-2"><?php echo esc_html($module['code']); ?></p>
+                                                </div>
+                                                <span class="px-2 py-1 text-xs font-medium rounded-full
+                                                    <?php echo strtolower($module['status']) === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'; ?>">
+                                                    <?php echo ucfirst($module['status']); ?>
+                                                </span>
+                                            </div>
+
+                                            <?php if (!empty($module['description'])): ?>
+                                                <p class="text-sm text-gray-700 mb-3"><?php echo esc_html(substr($module['description'], 0, 100)) . (strlen($module['description']) > 100 ? '...' : ''); ?></p>
+                                            <?php endif; ?>
+
+                            <div class="flex items-center justify-between text-sm text-gray-600">
+                                <div class="flex items-center">
+                                    <i class="fas fa-clock mr-1"></i>
+                                    <?php echo intval($module['duration_hours']); ?> hours
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <button onclick="openModuleSchedulesModal(<?php echo $module['id']; ?>, '<?php echo esc_js($module['name']); ?>')" class="text-purple-600 hover:text-purple-800 text-sm" title="Manage Module Schedules">
+                                        <i class="fas fa-calendar"></i>
+                                    </button>
+                                    <button onclick="editModule(<?php echo $module['id']; ?>)" class="text-blue-600 hover:text-blue-800 text-sm">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button onclick="deleteModule(<?php echo $module['id']; ?>, '<?php echo esc_js($module['name']); ?>')" class="text-red-600 hover:text-red-800 text-sm">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php else: ?>
+                                <div class="text-center py-12">
+                                    <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <i class="fas fa-book text-gray-400 text-2xl"></i>
+                                    </div>
+                                    <h4 class="text-lg font-medium text-gray-900 mb-2">No Modules Added</h4>
+                                    <p class="text-gray-600 text-sm mb-4">This course doesn't have any modules yet. Add modules to organize your course content.</p>
+                                    <button onclick="openAddModuleModal(<?php echo $course_id; ?>, '<?php echo esc_js($course['name']); ?>')" class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors">
+                                        <i class="fas fa-plus mr-2"></i>Add First Module
+                                    </button>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Right Column - Quick Actions (col-md-3 equivalent) -->
@@ -403,8 +483,8 @@ function nds_course_overview_page_content() {
         </div>
 
         <!-- Student Assignment Modal -->
-        <div id="studentAssignmentModal" class="fixed top-0 left-0 right-0 bottom-0 bg-black bg-opacity-50 hidden z-50" style="left: 160px;">
-            <div class="flex items-center justify-center h-full p-4">
+        <div id="studentAssignmentModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+            <div class="flex items-center justify-center w-full h-full p-4">
                 <div class="bg-white rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
                     <div class="p-6">
                         <div class="flex items-center justify-between mb-6">
@@ -530,8 +610,8 @@ function nds_course_overview_page_content() {
         </div>
 
         <!-- Lecturer Assignment Modal -->
-        <div id="lecturerAssignmentModal" class="fixed top-0 left-0 right-0 bottom-0 bg-black bg-opacity-50 hidden z-50" style="left: 160px;">
-            <div class="flex items-center justify-center h-full p-4">
+        <div id="lecturerAssignmentModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+            <div class="flex items-center justify-center w-full h-full p-4">
                 <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                     <div class="p-6">
                         <div class="flex items-center justify-between mb-6">
@@ -604,8 +684,8 @@ function nds_course_overview_page_content() {
         </div>
 
         <!-- Add Career Path Modal -->
-        <div id="addCareerPathModal" class="fixed top-0 left-0 right-0 bottom-0 bg-black bg-opacity-50 hidden z-50" style="left: 160px;">
-            <div class="flex items-center justify-center h-full p-4">
+        <div id="addCareerPathModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+            <div class="flex items-center justify-center w-full h-full p-4">
                 <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                     <div class="p-6">
                         <div class="flex items-center justify-between mb-6">
@@ -702,7 +782,53 @@ function nds_course_overview_page_content() {
             </div>
         </div>
 
+        <!-- Module Schedules Management Modal -->
+        <div id="moduleSchedulesModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+            <div class="flex items-center justify-center w-full h-full p-4">
+                <div class="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                    <div class="p-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <div>
+                                <h2 class="text-2xl font-bold text-gray-900">Edit Module Schedules</h2>
+                                <p class="text-sm text-gray-600 mt-1">Module: <span id="currentModuleName" class="font-semibold">Loading...</span></p>
+                            </div>
+                            <button type="button" onclick="closeModuleSchedulesModal()" class="text-gray-400 hover:text-gray-600">
+                                <i class="fas fa-times text-xl"></i>
+                            </button>
+                        </div>
+
+                        <form id="moduleSchedulesForm" method="POST" action="<?php echo admin_url('admin-post.php'); ?>">
+                            <?php wp_nonce_field('nds_edit_module_schedules', 'nds_edit_module_schedules_nonce'); ?>
+                            <input type="hidden" name="action" value="nds_update_module_schedules">
+                            <input type="hidden" name="module_id" id="moduleIdField" value="">
+                            <input type="hidden" name="course_id" id="courseIdField" value="">
+                            
+                            <!-- Schedule Fields Component -->
+                            <div id="moduleScheduleFieldsContainer">
+                                <p class="text-center py-8 text-gray-500">
+                                    <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                                    <p>Loading schedule editor...</p>
+                                </p>
+                            </div>
+
+                            <div class="flex items-center justify-end space-x-3 mt-8 pt-6 border-t border-gray-200">
+                                <button type="button" onclick="closeModuleSchedulesModal()"
+                                        class="button px-6 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+                                    Cancel
+                                </button>
+                                <button type="submit"
+                                        class="button button-primary px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium">
+                                    Save Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Hidden Delete Form -->
+
         <form id="deleteCareerPathForm" method="POST" action="<?php echo admin_url('admin-post.php'); ?>" style="display: none;">
             <input type="hidden" name="action" value="nds_delete_career_path">
             <input type="hidden" name="career_path_id" id="delete_career_path_id">
@@ -786,6 +912,86 @@ function nds_course_overview_page_content() {
         if (loaderTitle) loaderTitle.textContent = title;
         if (loaderMessage) loaderMessage.textContent = message;
     }
+
+    // Module Schedules Management Functions
+    let currentModuleId = 0;
+    let currentModuleName = '';
+    let currentCourseId = 0;
+    let originalScheduleData = '';
+
+    function openModuleSchedulesModal(moduleId, moduleName) {
+        currentModuleId = moduleId;
+        currentModuleName = moduleName;
+        currentCourseId = <?php echo $course_id; ?>;
+        
+        document.getElementById('currentModuleName').textContent = moduleName;
+        document.getElementById('moduleIdField').value = moduleId;
+        document.getElementById('courseIdField').value = currentCourseId;
+        document.getElementById('moduleSchedulesModal').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        
+        // Load schedule editor via AJAX
+        loadModuleScheduleEditor(moduleId, currentCourseId);
+    }
+
+    function closeModuleSchedulesModal() {
+        document.getElementById('moduleSchedulesModal').classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    function loadModuleScheduleEditor(moduleId, courseId) {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '<?php echo admin_url('admin-ajax.php'); ?>', true);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    if (response.success) {
+                        document.getElementById('moduleScheduleFieldsContainer').innerHTML = response.data;
+                        originalScheduleData = document.getElementById('moduleSchedulesForm').innerHTML;
+                        
+                        // Re-initialize schedule handlers after component is loaded
+                        setTimeout(function() {
+                            if (typeof ndsInitScheduleDayHandlers === 'function') {
+                                ndsInitScheduleDayHandlers();
+                            }
+                            if (typeof ndsInitStartTimeHandlers === 'function') {
+                                ndsInitStartTimeHandlers();
+                            }
+                        }, 100);
+                    } else {
+                        document.getElementById('moduleScheduleFieldsContainer').innerHTML = 
+                            '<div class="text-center py-8 text-red-500"><i class="fas fa-exclamation-triangle text-3xl mb-2"></i><p>Error: ' + response.data + '</p></div>';
+                    }
+                } catch (e) {
+                    console.error('Error parsing response:', e);
+                    document.getElementById('moduleScheduleFieldsContainer').innerHTML = 
+                        '<div class="text-center py-8 text-red-500"><p>Error parsing response</p></div>';
+                }
+            }
+        };
+        
+        xhr.onerror = function() {
+            document.getElementById('moduleScheduleFieldsContainer').innerHTML = 
+                '<div class="text-center py-8 text-red-500"><p>Network error loading schedule editor</p></div>';
+        };
+        
+        xhr.send('action=nds_get_module_schedule_editor&module_id=' + moduleId + '&course_id=' + courseId + '&nonce=<?php echo wp_create_nonce('nds_module_schedules_nonce'); ?>');
+    }
+
+    // Handle form submission
+    (function() {
+        const form = document.getElementById('moduleSchedulesForm');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                // Allow normal form submission to admin-post.php
+                // The backend will handle notifications
+                showPageLoader('Saving Schedules', 'Updating module schedules...');
+            });
+        }
+    })();
 
     // Career Path Modal Functions
     function openAddCareerPathModal() {
@@ -1310,6 +1516,278 @@ function nds_course_overview_page_content() {
             initializeDragAndDrop();
         }
     });
+
+    // Module Management Functions
+    function openAddModuleModal(courseId, courseName) {
+        // Create modal HTML
+        const modalHtml = `
+            <div id="add-module-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                    <div class="mt-3">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-bold text-gray-900">Add Module to ${courseName}</h3>
+                            <button onclick="closeModuleModal()" class="text-gray-400 hover:text-gray-600">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <form id="add-module-form" onsubmit="submitAddModule(event, ${courseId})">
+                            <div class="mb-4">
+                                <label for="module-name" class="block text-sm font-medium text-gray-700 mb-2">Module Name *</label>
+                                <input type="text" id="module-name" name="module_name" required 
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500">
+                            </div>
+                            <div class="mb-4">
+                                <label for="module-code" class="block text-sm font-medium text-gray-700 mb-2">Module Code *</label>
+                                <input type="text" id="module-code" name="module_code" required 
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500">
+                            </div>
+                            <div class="mb-4">
+                                <label for="module-description" class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                                <textarea id="module-description" name="description" rows="3" 
+                                          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"></textarea>
+                            </div>
+                            <div class="mb-4">
+                                <label for="module-duration" class="block text-sm font-medium text-gray-700 mb-2">Duration (Hours) *</label>
+                                <input type="number" id="module-duration" name="duration_hours" required min="1" 
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500">
+                            </div>
+                            <div class="flex justify-end space-x-3">
+                                <button type="button" onclick="closeModuleModal()" 
+                                        class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors">
+                                    Cancel
+                                </button>
+                                <button type="submit" 
+                                        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+                                    <i class="fas fa-plus mr-2"></i>Add Module
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+    }
+
+    function closeModuleModal() {
+        const modal = document.getElementById('add-module-modal');
+        if (modal) {
+            modal.remove();
+        }
+    }
+
+    function submitAddModule(event, courseId) {
+        event.preventDefault();
+        
+        const formData = new FormData(event.target);
+        formData.append('action', 'nds_add_module');
+        formData.append('course_id', courseId);
+        formData.append('security', '<?php echo wp_create_nonce("nds_add_module_nonce"); ?>');
+        
+        fetch('<?php echo admin_url("admin-ajax.php"); ?>', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('Module added successfully!', 'success');
+                closeModuleModal();
+                // Refresh the page to show the new module
+                location.reload();
+            } else {
+                showNotification(data.data || 'Error adding module', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('Error adding module', 'error');
+        });
+    }
+
+    function editModule(moduleId) {
+        // For now, just show a notification that edit is not implemented yet
+        showNotification('Edit module functionality coming soon!', 'info');
+    }
+
+    function deleteModule(moduleId, moduleName) {
+        if (confirm(`Are you sure you want to delete the module "${moduleName}"? This action cannot be undone.`)) {
+            const formData = new FormData();
+            formData.append('action', 'nds_delete_module');
+            formData.append('module_id', moduleId);
+            formData.append('security', '<?php echo wp_create_nonce("nds_delete_module_nonce"); ?>');
+            
+            fetch('<?php echo admin_url("admin-ajax.php"); ?>', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Module deleted successfully!', 'success');
+                    // Refresh the page to update the modules list
+                    location.reload();
+                } else {
+                    showNotification(data.data || 'Error deleting module', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('Error deleting module', 'error');
+            });
+        }
+    }
     </script>
     <?php
+}   
+
+// AJAX handler for adding modules
+add_action('wp_ajax_nds_add_module', 'nds_ajax_add_module');
+function nds_ajax_add_module() {
+    // Check user capabilities
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('Unauthorized access');
+        return;
+    }
+    
+    // Verify nonce
+    if (!isset($_POST['security']) || !wp_verify_nonce($_POST['security'], 'nds_add_module_nonce')) {
+        wp_send_json_error('Security check failed');
+        return;
+    }
+    
+    global $wpdb;
+    $table_modules = $wpdb->prefix . 'nds_modules';
+    
+    // Check if table exists, if not create it
+    if ($wpdb->get_var("SHOW TABLES LIKE '$table_modules'") != $table_modules) {
+        $charset_collate = $wpdb->get_charset_collate();
+        $sql = "CREATE TABLE $table_modules (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            code VARCHAR(20) DEFAULT NULL,
+            name VARCHAR(255) NOT NULL,
+            course_id INT NOT NULL,
+            type ENUM('theory','practical','workplace','assessment') DEFAULT 'theory',
+            duration_hours INT,
+            description TEXT,
+            status ENUM('active','inactive','draft') DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_course (course_id),
+            INDEX idx_code (code),
+            INDEX idx_type (type)
+        ) $charset_collate;";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+    }
+    
+    // Get form data
+    $course_id = isset($_POST['course_id']) ? intval($_POST['course_id']) : 0;
+    $module_name = isset($_POST['module_name']) ? sanitize_text_field($_POST['module_name']) : '';
+    $module_code = isset($_POST['module_code']) ? sanitize_text_field($_POST['module_code']) : '';
+    $module_description = isset($_POST['description']) ? sanitize_textarea_field($_POST['description']) : '';
+    $module_duration = isset($_POST['duration_hours']) ? intval($_POST['duration_hours']) : 0;
+    
+    // Validate required fields
+    if (empty($module_name) || empty($module_code) || empty($course_id) || empty($module_duration)) {
+        wp_send_json_error('All required fields must be filled');
+        return;
+    }
+    
+    // Check if course exists
+    $course_exists = $wpdb->get_var($wpdb->prepare(
+        "SELECT id FROM {$wpdb->prefix}nds_courses WHERE id = %d", 
+        $course_id
+    ));
+    
+    if (!$course_exists) {
+        wp_send_json_error('Course does not exist');
+        return;
+    }
+    
+    // Check for duplicate module code in the same course
+    $existing_module = $wpdb->get_var($wpdb->prepare(
+        "SELECT id FROM $table_modules WHERE code = %s AND course_id = %d",
+        $module_code, $course_id
+    ));
+    
+    if ($existing_module) {
+        wp_send_json_error('A module with this code already exists in this course');
+        return;
+    }
+    
+    // Insert the module
+    $result = $wpdb->insert(
+        $table_modules,
+        array(
+            'course_id' => $course_id,
+            'name' => $module_name,
+            'code' => $module_code,
+            'duration_hours' => $module_duration,
+            'description' => $module_description,
+            'status' => 'active',
+            'type' => 'theory'
+        ),
+        array('%d', '%s', '%s', '%d', '%s', '%s', '%s')
+    );
+    
+    if ($result === false) {
+        wp_send_json_error('Failed to add module: ' . $wpdb->last_error);
+        return;
+    }
+    
+    wp_send_json_success('Module added successfully');
+}
+
+// AJAX handler for deleting modules
+add_action('wp_ajax_nds_delete_module', 'nds_ajax_delete_module');
+function nds_ajax_delete_module() {
+    // Check user capabilities
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('Unauthorized access');
+        return;
+    }
+    
+    // Verify nonce
+    if (!isset($_POST['security']) || !wp_verify_nonce($_POST['security'], 'nds_delete_module_nonce')) {
+        wp_send_json_error('Security check failed');
+        return;
+    }
+    
+    global $wpdb;
+    $table_modules = $wpdb->prefix . 'nds_modules';
+    
+    $module_id = isset($_POST['module_id']) ? intval($_POST['module_id']) : 0;
+    
+    if (empty($module_id)) {
+        wp_send_json_error('Module ID is required');
+        return;
+    }
+    
+    // Check if module exists
+    $module_exists = $wpdb->get_var($wpdb->prepare(
+        "SELECT id FROM $table_modules WHERE id = %d",
+        $module_id
+    ));
+    
+    if (!$module_exists) {
+        wp_send_json_error('Module does not exist');
+        return;
+    }
+    
+    // Delete the module
+    $result = $wpdb->delete(
+        $table_modules,
+        array('id' => $module_id),
+        array('%d')
+    );
+    
+    if ($result === false) {
+        wp_send_json_error('Failed to delete module: ' . $wpdb->last_error);
+        return;
+    }
+    
+    wp_send_json_success('Module deleted successfully');
 }   

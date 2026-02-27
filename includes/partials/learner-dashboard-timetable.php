@@ -35,20 +35,46 @@ $enrollments = $wpdb->get_results($wpdb->prepare(
 $active_year = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}nds_academic_years WHERE is_active = 1 ORDER BY id DESC LIMIT 1", ARRAY_A);
 $active_semester = $wpdb->get_row("SELECT * FROM {$wpdb->prefix}nds_semesters WHERE is_active = 1 ORDER BY id DESC LIMIT 1", ARRAY_A);
 
-// Get course schedules for enrolled courses
+// Get course schedules for enrolled courses and modules
 $course_ids = array_column($enrollments, 'course_id');
 $schedules = [];
 if (!empty($course_ids)) {
+    // Get the student's enrolled modules to filter schedules
+    $student_modules_table = $wpdb->prefix . 'nds_student_modules';
+    $enrolled_modules = $wpdb->get_col($wpdb->prepare(
+        "SELECT module_id FROM {$student_modules_table} WHERE student_id = %d AND status = 'enrolled' AND academic_year_id = %d AND semester_id = %d",
+        $learner_id, $active_year ? $active_year['id'] : 0, $active_semester ? $active_semester['id'] : 0
+    ));
+    
     $placeholders = implode(',', array_fill(0, count($course_ids), '%d'));
+    
+    // Build module filter clause
+    $module_filter = "cs.module_id IS NULL"; // Always include course-level schedules
+    if (!empty($enrolled_modules)) {
+        $mod_placeholders = implode(',', array_fill(0, count($enrolled_modules), '%d'));
+        $module_filter = "(cs.module_id IS NULL OR cs.module_id IN ($mod_placeholders))";
+    }
+    
+    // Prepare base arguments for course IDs
+    $query_args = $course_ids;
+    // Append module IDs to arguments if applicable
+    if (!empty($enrolled_modules)) {
+        $query_args = array_merge($query_args, $enrolled_modules);
+    }
+    
     $schedules = $wpdb->get_results($wpdb->prepare(
         "SELECT cs.*, c.name as course_name, c.code as course_code,
-                s.first_name as lecturer_first_name, s.last_name as lecturer_last_name
+                s.first_name as lecturer_first_name, s.last_name as lecturer_last_name,
+                m.name as module_name, m.code as module_code
          FROM {$wpdb->prefix}nds_course_schedules cs
          LEFT JOIN {$wpdb->prefix}nds_courses c ON cs.course_id = c.id
+         LEFT JOIN {$wpdb->prefix}nds_modules m ON cs.module_id = m.id
          LEFT JOIN {$wpdb->prefix}nds_staff s ON cs.lecturer_id = s.id
-         WHERE cs.course_id IN ($placeholders) AND cs.is_active = 1
+         WHERE cs.course_id IN ($placeholders) 
+           AND cs.is_active = 1 
+           AND {$module_filter}
          ORDER BY cs.days, cs.start_time",
-        $course_ids
+        ...$query_args
     ), ARRAY_A);
 }
 

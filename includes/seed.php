@@ -193,7 +193,7 @@ function nds_seed_lms_data() {
 		['bachelor', 'Bachelor\'s Degree', 3, 'undergraduate'],
 		['honours', 'Honours Degree', 1, 'undergraduate'],
 		['masters', 'Master\'s Degree', 2, 'postgraduate'],
-		['phd', 'Doctor of Philosophy', 3, 'postgraduate'],
+		['phd', 'Courses of Philosophy', 3, 'postgraduate'],
 		['certificate', 'Certificate', 0, 'professional'],
 		['short_course', 'Short Course', 0, 'professional']
 	];

@@ -192,7 +192,7 @@ function nds_update_student($student_id = null) {
         exit;
     }
 }
-add_action('admin_post_nds_update_student', 'nds_update_student');
+add_action('admin_post_nds_edit_student', 'nds_update_student');
 
 // Get student by ID
 function nds_get_student($student_id) {
@@ -841,3 +841,107 @@ function nds_seed_students_with_enrollments_action() {
     exit;
 }
 add_action('admin_post_nds_seed_students_with_enrollments', 'nds_seed_students_with_enrollments_action');
+
+// Handle student profile updates from learner portal
+function nds_handle_student_profile_update() {
+    // Check if user is logged in
+    if (!is_user_logged_in()) {
+        wp_die('Unauthorized access');
+    }
+
+    // Verify nonce
+    if (!isset($_POST['nds_profile_nonce']) || !wp_verify_nonce($_POST['nds_profile_nonce'], 'nds_update_student_profile')) {
+        wp_die('Security check failed');
+    }
+
+    global $wpdb;
+    $students_table = $wpdb->prefix . 'nds_students';
+
+    // Get current user
+    $current_user = wp_get_current_user();
+    $user_email = $current_user->user_email;
+
+    // Find student by email
+    $student = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM {$students_table} WHERE email = %s",
+        $user_email
+    ));
+
+    if (!$student) {
+        wp_die('Student profile not found');
+    }
+
+    // Sanitize and validate input
+    $first_name = isset($_POST['first_name']) ? sanitize_text_field($_POST['first_name']) : '';
+    $last_name = isset($_POST['last_name']) ? sanitize_text_field($_POST['last_name']) : '';
+    $email = isset($_POST['email']) ? sanitize_email($_POST['email']) : '';
+    $phone = isset($_POST['phone']) ? sanitize_text_field($_POST['phone']) : '';
+    $date_of_birth = isset($_POST['date_of_birth']) ? sanitize_text_field($_POST['date_of_birth']) : '';
+    $gender = isset($_POST['gender']) ? sanitize_text_field($_POST['gender']) : '';
+    $address = isset($_POST['address']) ? sanitize_text_field($_POST['address']) : '';
+    $city = isset($_POST['city']) ? sanitize_text_field($_POST['city']) : '';
+    $country = isset($_POST['country']) ? sanitize_text_field($_POST['country']) : '';
+
+    // Validate required fields
+    if (empty($first_name) || empty($last_name) || empty($email)) {
+        wp_redirect(add_query_arg('profile_error', 'required_fields', nds_learner_portal_tab_url('overview')));
+        exit;
+    }
+
+    // Validate email format
+    if (!is_email($email)) {
+        wp_redirect(add_query_arg('profile_error', 'invalid_email', nds_learner_portal_tab_url('overview')));
+        exit;
+    }
+
+    // Check if email is already taken by another student
+    $existing_student = $wpdb->get_var($wpdb->prepare(
+        "SELECT id FROM {$students_table} WHERE email = %s AND id != %d",
+        $email,
+        $student->id
+    ));
+
+    if ($existing_student) {
+        wp_redirect(add_query_arg('profile_error', 'email_taken', nds_learner_portal_tab_url('overview')));
+        exit;
+    }
+
+    // Update student record
+    $update_data = array(
+        'first_name' => $first_name,
+        'last_name' => $last_name,
+        'email' => $email,
+        'phone' => $phone,
+        'date_of_birth' => $date_of_birth,
+        'gender' => $gender,
+        'address' => $address,
+        'city' => $city,
+        'country' => $country,
+        'updated_at' => current_time('mysql')
+    );
+
+    $result = $wpdb->update(
+        $students_table,
+        $update_data,
+        array('id' => $student->id),
+        array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s'),
+        array('%d')
+    );
+
+    if ($result !== false) {
+        // Update WordPress user email if it changed
+        if ($email !== $current_user->user_email) {
+            wp_update_user(array(
+                'ID' => $current_user->ID,
+                'user_email' => $email
+            ));
+        }
+
+        wp_redirect(add_query_arg('profile_success', 'updated', nds_learner_portal_tab_url('overview')));
+    } else {
+        wp_redirect(add_query_arg('profile_error', 'update_failed', nds_learner_portal_tab_url('overview')));
+    }
+    exit;
+}
+add_action('admin_post_nds_update_student_profile', 'nds_handle_student_profile_update');
+add_action('admin_post_nopriv_nds_update_student_profile', 'nds_handle_student_profile_update');

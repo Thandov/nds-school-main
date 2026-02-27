@@ -9,8 +9,23 @@ if (!defined('ABSPATH')) {
 global $wpdb;
 $learner_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
-// TODO: Get certificates from certificates table when implemented
-$certificates = [];
+// Get certificates from certificates table
+$table_certificates = $wpdb->prefix . 'nds_certificates';
+$table_courses = $wpdb->prefix . 'nds_courses';
+
+$certificates = $wpdb->get_results($wpdb->prepare("
+    SELECT c.*, 
+           course.name as course_name,
+           course.program_name
+    FROM {$table_certificates} c
+    LEFT JOIN {$table_courses} course ON c.course_id = course.id
+    WHERE c.student_id = %d AND c.status = 'active'
+    ORDER BY c.issued_date DESC
+", $learner_id), ARRAY_A);
+
+if (!$certificates) {
+    $certificates = [];
+}
 ?>
 
 <div class="space-y-6">
@@ -34,11 +49,11 @@ $certificates = [];
                             Verified
                         </span>
                     </div>
-                    <h3 class="text-lg font-semibold text-gray-900 mb-2"><?php echo esc_html($cert['name']); ?></h3>
-                    <p class="text-sm text-gray-500 mb-4"><?php echo esc_html($cert['description']); ?></p>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2"><?php echo esc_html($cert['title']); ?></h3>
+                    <p class="text-sm text-gray-500 mb-4"><?php echo esc_html($cert['description'] ?: 'Certificate of completion'); ?></p>
                     <div class="flex items-center justify-between">
-                        <span class="text-xs text-gray-500">Issued: <?php echo esc_html($cert['issued_date']); ?></span>
-                        <a href="#" class="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                        <span class="text-xs text-gray-500">Issued: <?php echo esc_html(date('M j, Y', strtotime($cert['issued_date']))); ?></span>
+                        <a href="?page=nds-download-certificate&cert_id=<?php echo $cert['id']; ?>" class="text-blue-600 hover:text-blue-700 text-sm font-medium">
                             Download <i class="fas fa-download ml-1"></i>
                         </a>
                     </div>

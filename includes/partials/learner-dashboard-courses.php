@@ -168,6 +168,81 @@ $all_programs = $wpdb->get_results("
                     <?php endif; ?>
                 </div>
             </div>
+            
+            <!-- Module Enrollments Section -->
+            <?php if (!empty($enrolled_courses)): ?>
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mt-6 sticky top-[300px]">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center justify-between">
+                    <div class="flex items-center">
+                        <i class="fas fa-cubes text-blue-600 mr-2"></i>
+                        Module Enrollments
+                    </div>
+                </h3>
+                
+                <div class="space-y-4">
+                    <?php 
+                    $modules_table = $wpdb->prefix . 'nds_modules';
+                    $student_modules_table = $wpdb->prefix . 'nds_student_modules';
+                    
+                    // Get student's enrolled modules
+                    $enrolled_modules = $wpdb->get_col($wpdb->prepare(
+                        "SELECT module_id FROM {$student_modules_table} WHERE student_id = %d AND academic_year_id = %d AND semester_id = %d AND status = 'enrolled'",
+                        $learner_id, $active_year['id'], $active_semester['id']
+                    ));
+                    
+                    foreach ($enrolled_courses as $course): 
+                        $course_id = $course['course_id'];
+                        // Get all modules for this course
+                        $course_modules = $wpdb->get_results($wpdb->prepare(
+                            "SELECT * FROM {$modules_table} WHERE course_id = %d AND status = 'active' ORDER BY name",
+                            $course_id
+                        ), ARRAY_A);
+                    ?>
+                        <div class="mb-4">
+                            <h4 class="text-sm font-semibold text-gray-700 mb-2 border-b pb-1"><?php echo esc_html($course['course_name']); ?> Modules</h4>
+                            <?php if (empty($course_modules)): ?>
+                                <p class="text-xs text-gray-500 italic">No active modules found for this qualification.</p>
+                            <?php else: ?>
+                                <form id="module-enrollment-form-<?php echo intval($course_id); ?>" class="space-y-2">
+                                    <?php foreach ($course_modules as $module): 
+                                        $is_enrolled = in_array($module['id'], $enrolled_modules);
+                                    ?>
+                                        <label class="flex items-start p-2 hover:bg-gray-50 rounded border border-transparent hover:border-gray-200 cursor-pointer transition-colors">
+                                            <div class="flex items-center h-5">
+                                                <input type="checkbox" name="modules[]" value="<?php echo intval($module['id']); ?>" 
+                                                       class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 module-checkbox"
+                                                       <?php checked($is_enrolled); ?>>
+                                            </div>
+                                            <div class="ml-3 text-sm flex-1">
+                                                <span class="font-medium text-gray-700"><?php echo esc_html($module['name']); ?></span>
+                                                <div class="text-xs text-gray-500 mt-0.5">
+                                                    <?php if (!empty($module['code'])): ?>
+                                                        <span class="mr-2 px-1.5 py-0.5 bg-gray-100 rounded text-gray-600"><?php echo esc_html($module['code']); ?></span>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($module['type'])): ?>
+                                                        <span class="capitalize"><i class="fas fa-tag mr-1 opacity-70"></i><?php echo esc_html($module['type']); ?></span>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($module['duration_hours'])): ?>
+                                                        <span class="ml-2"><i class="fas fa-clock mr-1 opacity-70"></i><?php echo intval($module['duration_hours']); ?>h</span>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                        </label>
+                                    <?php endforeach; ?>
+                                    
+                                    <div class="pt-3 flex justify-end">
+                                        <button type="button" onclick="saveModuleEnrollments(<?php echo intval($learner_id); ?>, <?php echo intval($course_id); ?>)" 
+                                                class="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition text-white !important flex items-center shadow-sm">
+                                            <i class="fas fa-save mr-1.5"></i> Save Modules
+                                        </button>
+                                    </div>
+                                </form>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
         </div>
 
         <!-- Right Column: Available Courses by Faculty/Program -->
@@ -662,5 +737,63 @@ function showMessage(message, type) {
     setTimeout(() => {
         messageDiv.remove();
     }, 3000);
+}
+
+function saveModuleEnrollments(studentId, courseId) {
+    const form = document.getElementById('module-enrollment-form-' + courseId);
+    if (!form) return;
+    
+    const checkboxes = form.querySelectorAll('.module-checkbox');
+    const selectedModules = [];
+    
+    checkboxes.forEach(cb => {
+        if (cb.checked) {
+            selectedModules.push(cb.value);
+        }
+    });
+    
+    // Check if we also need to gather modules from other forms if the student has multiple courses somehow
+    // but the backend handler will just take pure module_ids and replace them all.
+    // To be safe, let's gather ALL checked modules across all course modules forms in this view
+    const allCheckboxes = document.querySelectorAll('.module-checkbox');
+    const allSelectedModules = [];
+    allCheckboxes.forEach(cb => {
+        if (cb.checked) {
+            allSelectedModules.push(cb.value);
+        }
+    });
+
+    const formData = new FormData();
+    formData.append('action', 'nds_save_module_enrollments');
+    formData.append('student_id', studentId);
+    formData.append('module_ids', JSON.stringify(allSelectedModules));
+    formData.append('nonce', '<?php echo wp_create_nonce('nds_save_module_enrollments'); ?>');
+    
+    const btn = form.querySelector('button');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i> Saving...';
+    btn.disabled = true;
+    
+    fetch('<?php echo admin_url('admin-ajax.php'); ?>', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        
+        if (data.success) {
+            showMessage(data.data.message || 'Modules saved successfully!', 'success');
+        } else {
+            showMessage('Error: ' + (data.data || 'Failed to save modules'), 'error');
+        }
+    })
+    .catch(error => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        console.error('AJAX Error:', error);
+        showMessage('Error saving modules. Check console.', 'error');
+    });
 }
 </script>

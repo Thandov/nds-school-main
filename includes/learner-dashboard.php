@@ -202,6 +202,7 @@ function nds_learner_dashboard_page() {
                         $tabs = [
                             'overview' => ['icon' => 'fa-home', 'label' => 'Overview'],
                             'courses' => ['icon' => 'fa-book', 'label' => 'Courses'],
+                            'modules' => ['icon' => 'fa-cubes', 'label' => 'Modules'],
                             'timetable' => ['icon' => 'fa-calendar-alt', 'label' => 'Timetable'],
                             'finances' => ['icon' => 'fa-dollar-sign', 'label' => 'Finances'],
                             'results' => ['icon' => 'fa-chart-bar', 'label' => 'Results'],
@@ -236,6 +237,9 @@ function nds_learner_dashboard_page() {
                             break;
                         case 'courses':
                             include plugin_dir_path(__FILE__) . 'partials/learner-dashboard-courses.php';
+                            break;
+                        case 'modules':
+                            include plugin_dir_path(__FILE__) . 'partials/learner-dashboard-modules.php';
                             break;
                         case 'timetable':
                             include plugin_dir_path(__FILE__) . 'partials/learner-dashboard-timetable.php';

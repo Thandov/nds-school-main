@@ -674,19 +674,19 @@ function nds_enroll_student_ajax() {
             wp_send_json_error($wpdb->last_error ?: 'Update failed');
         }
     } else {
-        // Check if student is already enrolled in another course this term (business rule)
-        $other_enrollment = $wpdb->get_var($wpdb->prepare(
-            "SELECT id FROM {$enrollments_table} WHERE student_id = %d AND academic_year_id = %d AND semester_id = %d AND course_id != %d AND status IN ('applied','enrolled','waitlisted')",
-            $student_id, $active_year_id, $active_semester_id, $course_id
+        // Check if student is already enrolled in any course (one qualification per student - business rule)
+        $existing_enrollment = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$enrollments_table} WHERE student_id = %d AND status IN ('applied','enrolled','waitlisted')",
+            $student_id
         ));
 
-        if ($other_enrollment) {
-            nds_log_error('Attempted to enroll student already enrolled in another course', array(
+        if ($existing_enrollment) {
+            nds_log_error('Attempted to enroll student already enrolled in a qualification', array(
                 'student_id' => $student_id,
                 'course_id' => $course_id,
-                'existing_enrollment_id' => $other_enrollment
+                'existing_enrollment_id' => $existing_enrollment
             ), 'warning');
-            wp_send_json_error('Student is already enrolled in another course for this term');
+            wp_send_json_error('Student is already enrolled in a qualification. Only one qualification per student is allowed.');
         }
 
         // Create new enrollment

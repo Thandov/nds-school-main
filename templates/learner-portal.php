@@ -52,7 +52,7 @@ if (!defined('ABSPATH')) {
             border-left: 4px solid #3b82f6;
         }
         
-        .timetable-cell .course-code {
+        .timetable-cell .module-code {
             font-weight: 700;
             font-size: 0.8rem;
             color: #1e40af;
@@ -60,7 +60,7 @@ if (!defined('ABSPATH')) {
             margin-bottom: 0.25rem;
         }
         
-        .timetable-cell .course-name {
+        .timetable-cell .module-name {
             font-size: 0.75rem;
             color: #334155;
             margin-bottom: 0.25rem;
@@ -760,7 +760,7 @@ if (!defined('ABSPATH')) {
                 padding: 0.25rem;
             }
             
-            .timetable-cell .course-name {
+            .timetable-cell .module-name {
                 display: none;
             }
             
@@ -842,8 +842,30 @@ if ($student_id <= 0) {
     $full_name    = trim(($learner_data['first_name'] ?? '') . ' ' . ($learner_data['last_name'] ?? ''));
 }
 
-// Enrollments (used for multiple sections)
-$enrollments = $wpdb->get_results(
+// Get enrolled modules for the student
+$enrolled_modules = $wpdb->get_results(
+    $wpdb->prepare(
+        "
+        SELECT sm.*, m.name as module_name, m.code as module_code, m.type as module_type, m.duration_hours,
+               c.name as course_name, c.code as course_code,
+               p.name as program_name,
+               ay.year_name, s.semester_name
+        FROM {$wpdb->prefix}nds_student_modules sm
+        LEFT JOIN {$wpdb->prefix}nds_modules m ON sm.module_id = m.id
+        LEFT JOIN {$wpdb->prefix}nds_courses c ON m.course_id = c.id
+        LEFT JOIN {$wpdb->prefix}nds_programs p ON c.program_id = p.id
+        LEFT JOIN {$wpdb->prefix}nds_academic_years ay ON sm.academic_year_id = ay.id
+        LEFT JOIN {$wpdb->prefix}nds_semesters s ON sm.semester_id = s.id
+        WHERE sm.student_id = %d AND sm.status = 'enrolled'
+        ORDER BY m.name ASC
+        ",
+        $student_id
+    ),
+    ARRAY_A
+);
+
+// Get enrolled courses (qualifications) for the student
+$enrolled_courses = $wpdb->get_results(
     $wpdb->prepare(
         "
         SELECT e.*, c.name as course_name, c.code as course_code,
@@ -865,49 +887,69 @@ $enrollments = $wpdb->get_results(
 // Get timetable data for the student
 $timetable_data = [];
 $calendar_events = [];
-if (!empty($enrollments)) {
-    // Get course IDs from enrollments
-    $course_ids = array_column($enrollments, 'course_id');
-    $course_ids = array_filter($course_ids); // Remove empty values
+if (!empty($enrolled_modules)) {
+    // Get module IDs from enrolled modules
+    $module_ids = array_column($enrolled_modules, 'module_id');
+    $module_ids = array_filter($module_ids); // Remove empty values
     
-    if (!empty($course_ids)) {
-        $placeholders = implode(',', array_fill(0, count($course_ids), '%d'));
+    if (!empty($module_ids)) {
+        $placeholders = implode(',', array_fill(0, count($module_ids), '%d'));
+        
+        // Get timetable entries for enrolled modules
         $timetable_data = $wpdb->get_results(
             $wpdb->prepare(
                 "
-                SELECT t.*, c.name as course_name, c.code as course_code,
-                       v.name as venue_name, v.building, v.room_number,
+                SELECT t.*,
+                       COALESCE(m.name, c.name) as display_name,
+                       COALESCE(m.code, c.code) as display_code,
+                       m.name as module_name, m.code as module_code, m.duration_hours,
+                       c.name as course_name, c.code as course_code,
+                       r.name as venue_name, r.code as room_code, r.location as room_location,
                        u.display_name as lecturer_name
-                FROM {$wpdb->prefix}nds_timetable t
+                FROM {$wpdb->prefix}nds_course_schedules t
+                LEFT JOIN {$wpdb->prefix}nds_modules m ON t.module_id = m.id
                 LEFT JOIN {$wpdb->prefix}nds_courses c ON t.course_id = c.id
-                LEFT JOIN {$wpdb->prefix}nds_venues v ON t.venue_id = v.id
-                LEFT JOIN {$wpdb->prefix}users u ON t.lecturer_id = u.ID
-                WHERE t.course_id IN ($placeholders)
+                LEFT JOIN {$wpdb->prefix}nds_rooms r ON t.room_id = r.id
+                LEFT JOIN {$wpdb->prefix}nds_staff s ON t.lecturer_id = s.id
+                LEFT JOIN {$wpdb->prefix}users u ON s.user_id = u.ID
+                WHERE t.module_id IN ($placeholders)
                 AND t.is_active = 1
-                ORDER BY t.day_of_week, t.start_time
+                ORDER BY t.days, t.start_time
                 ",
-                $course_ids
+                $module_ids
             ),
             ARRAY_A
         );
         
         // Generate calendar events from timetable
         foreach ($timetable_data as $class) {
-            // This is a recurring event - we'll generate for current month
-            $calendar_events[] = [
-                'id' => $class['id'],
-                'title' => $class['course_code'] . ' - ' . ($class['class_type'] ?? 'Lecture'),
-                'description' => $class['course_name'],
-                'type' => $class['class_type'] ?? 'lecture',
-                'start_time' => $class['start_time'],
-                'end_time' => $class['end_time'],
-                'venue' => ($class['building'] ?? '') . ' ' . ($class['room_number'] ?? ''),
-                'lecturer' => $class['lecturer_name'] ?? '',
-                'day_of_week' => $class['day_of_week'],
-                'is_recurring' => true,
-                'course_code' => $class['course_code'],
-                'course_name' => $class['course_name']
-            ];
+            // Handle multiple days (days field contains comma-separated values like "Mon,Wed,Fri")
+            $days = explode(',', $class['days']);
+            foreach ($days as $day) {
+                $day = trim($day);
+                if (empty($day)) continue;
+
+                // Convert day name to number (1=Monday, 7=Sunday)
+                $day_numbers = [
+                    'Mon' => 1, 'Tue' => 2, 'Wed' => 3, 'Thu' => 4, 'Fri' => 5, 'Sat' => 6, 'Sun' => 7
+                ];
+                $day_of_week = $day_numbers[$day] ?? 1;
+
+                $calendar_events[] = [
+                    'id' => $class['id'] . '_' . $day . '_' . ($class['module_code'] ?? 'mod'),
+                    'title' => ($class['display_code'] ?? $class['course_code']) . ' - ' . ucfirst($class['session_type'] ?? 'lecture'),
+                    'description' => ($class['display_name'] ?? $class['course_name']),
+                    'type' => $class['session_type'] ?? 'lecture',
+                    'start_time' => $class['start_time'],
+                    'end_time' => $class['end_time'],
+                    'venue' => ($class['venue_name'] ?? '') . ' ' . ($class['room_code'] ?? ''),
+                    'lecturer' => $class['lecturer_name'] ?? '',
+                    'day_of_week' => $day_of_week,
+                    'is_recurring' => true,
+                    'module_code' => $class['display_code'] ?? $class['course_code'],
+                    'module_name' => $class['display_name'] ?? $class['course_name']
+                ];
+            }
         }
     }
 }
@@ -938,7 +980,7 @@ foreach ($academic_events as $event) {
 }
 
 // Recent enrollments (for Overview tab)
-$recent_enrollments = array_slice($enrollments, 0, 5);
+$recent_enrollments = array_slice($enrolled_courses, 0, 5);
 
 // Faculty
 $faculty = null;
@@ -974,7 +1016,7 @@ $certificates_count = $wpdb->get_var(
 $latest_application = null;
 $status = $learner_data['status'] ?? 'prospect';
 $is_applicant = in_array($status, ['prospect', 'applicant'], true);
-$has_no_enrollments = empty($enrollments);
+$has_no_enrollments = empty($enrolled_modules);
 if ($is_applicant || ($status === 'active' && $has_no_enrollments)) {
     $latest_application = function_exists('nds_portal_get_latest_application_for_current_user')
         ? nds_portal_get_latest_application_for_current_user()
@@ -983,8 +1025,8 @@ if ($is_applicant || ($status === 'active' && $has_no_enrollments)) {
 
 // Learner-facing programme name
 $display_program_name = '';
-if (!empty($enrollments)) {
-    foreach ($enrollments as $row) {
+if (!empty($enrolled_courses)) {
+    foreach ($enrolled_courses as $row) {
         if (!empty($row['program_name'])) {
             $display_program_name = $row['program_name'];
             break;
@@ -1001,10 +1043,10 @@ if (!$display_program_name && !empty($latest_application)) {
 }
 
 // Counts for quick stats
-$enrolled_courses_count = count($enrollments);
-$applied_courses_count  = 0;
+$enrolled_modules_count = count($enrolled_modules);
+$applied_modules_count  = 0;
 if ($is_applicant && !empty($latest_application)) {
-    $applied_courses_count = 1;
+    $applied_modules_count = 1;
 }
 
 // Current tab and view
@@ -1279,7 +1321,47 @@ $upcoming_events = array_slice($upcoming_events, 0, 10);
             </div>
         </div>
     <?php endif; ?>
-    
+
+    <!-- Profile Update Messages -->
+    <?php if (isset($_GET['profile_success']) && $_GET['profile_success'] === 'updated'): ?>
+        <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mx-4 mt-4 flex items-center">
+            <span class="dashicons dashicons-yes-alt text-emerald-600 mr-3 text-xl"></span>
+            <div>
+                <h3 class="text-sm font-semibold text-emerald-800">Profile Updated</h3>
+                <p class="text-sm text-emerald-700">Your profile information has been successfully updated.</p>
+            </div>
+        </div>
+    <?php endif; ?>
+
+    <?php if (isset($_GET['profile_error'])): ?>
+        <div class="bg-red-50 border border-red-200 rounded-lg p-4 mx-4 mt-4 flex items-center">
+            <span class="dashicons dashicons-warning text-red-600 mr-3 text-xl"></span>
+            <div>
+                <h3 class="text-sm font-semibold text-red-800">Update Failed</h3>
+                <p class="text-sm text-red-700">
+                    <?php
+                    switch ($_GET['profile_error']) {
+                        case 'required_fields':
+                            echo 'Please fill in all required fields.';
+                            break;
+                        case 'invalid_email':
+                            echo 'Please enter a valid email address.';
+                            break;
+                        case 'email_taken':
+                            echo 'This email address is already in use by another student.';
+                            break;
+                        case 'update_failed':
+                            echo 'Failed to update profile. Please try again.';
+                            break;
+                        default:
+                            echo 'An error occurred while updating your profile.';
+                    }
+                    ?>
+                </p>
+            </div>
+        </div>
+    <?php endif; ?>
+
     <!-- Header -->
     <?php if (current_user_can('manage_options')) : ?>
         <div class="bg-amber-50 border-b border-amber-200 py-2 px-4 shadow-sm relative z-50 no-print">
@@ -1376,7 +1458,7 @@ $upcoming_events = array_slice($upcoming_events, 0, 10);
                                                         <p class="text-base font-bold text-slate-900 leading-none truncate pr-8"><?php echo esc_html($notif['title']); ?></p>
                                                         <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider whitespace-nowrap"><?php echo human_time_diff(strtotime($notif['created_at']), current_time('timestamp')); ?></span>
                                                     </div>
-                                                    <p class="text-sm text-slate-500 leading-relaxed font-medium line-clamp-2"><?php echo esc_html($notif['message']); ?></p>
+                                                    <p class="text-sm text-slate-500 leading-relaxed font-medium line-clamp-2"><?php echo wp_kses_post($notif['message']); ?></p>
                                                 </div>
                                             </div>
                                             <button class="nds-mark-read absolute top-6 right-6 w-8 h-8 flex items-center justify-center rounded-xl text-slate-300 hover:text-blue-600 hover:bg-white hover:shadow-md opacity-0 group-hover:opacity-100 transition-all border border-transparent hover:border-slate-100" title="Mark as read">
@@ -1428,8 +1510,8 @@ $upcoming_events = array_slice($upcoming_events, 0, 10);
                 <div class="stat-icon bg-blue-50 text-blue-600">
                     <i class="fas fa-book text-2xl"></i>
                 </div>
-                <div class="stat-value"><?php echo $is_applicant ? $applied_courses_count : $enrolled_courses_count; ?></div>
-                <div class="stat-label"><?php echo $is_applicant ? 'Applied Courses' : 'Enrolled Courses'; ?></div>
+                <div class="stat-value"><?php echo $is_applicant ? $applied_modules_count : $enrolled_modules_count; ?></div>
+                <div class="stat-label"><?php echo $is_applicant ? 'Applied Modules' : 'Enrolled Modules'; ?></div>
             </div>
 
             <!-- Second Stat Card -->
@@ -1478,7 +1560,7 @@ $upcoming_events = array_slice($upcoming_events, 0, 10);
                     <?php
                     $tabs = array(
                         'overview'     => array('icon' => 'fa-home', 'label' => 'Overview'),
-                        'courses'      => array('icon' => 'fa-book', 'label' => 'Courses'),
+                        'courses'      => array('icon' => 'fa-book', 'label' => 'Modules'),
                         'timetable'    => array('icon' => 'fa-calendar-alt', 'label' => 'Schedule'),
                         'finances'     => array('icon' => 'fa-dollar-sign', 'label' => 'Finances'),
                         'results'      => array('icon' => 'fa-chart-bar', 'label' => 'Results'),
@@ -1521,262 +1603,330 @@ $upcoming_events = array_slice($upcoming_events, 0, 10);
                     case 'overview':
                         ?>
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                            <!-- Personal Information -->
-                            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 <?php echo !empty($latest_application) ? 'lg:col-span-2 order-1' : 'lg:col-span-3'; ?>">
-                                <h2 class="text-xl font-semibold text-gray-900 mb-4">Personal Information</h2>
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
-                                        <label class="text-sm font-medium text-gray-500">Full Name</label>
-                                        <p class="mt-1 text-sm text-gray-900"><?php echo esc_html($full_name); ?></p>
+                            <!-- Main Content Column -->
+                            <div class="lg:col-span-2 space-y-6">
+                                <!-- Personal Information -->
+                                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                                    <div class="flex items-center justify-between mb-4">
+                                        <h2 class="text-xl font-semibold text-gray-900">Personal Information</h2>
+                                        <button id="editProfileBtn" class="inline-flex items-center px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors">
+                                            <i class="fas fa-edit mr-2"></i>
+                                            Edit Details
+                                        </button>
                                     </div>
-                                    <div>
-                                        <label class="text-sm font-medium text-gray-500">Student Number</label>
-                                        <p class="mt-1 text-sm text-gray-900"><?php echo esc_html($learner_data['student_number'] ?? 'N/A'); ?></p>
-                                    </div>
-                                    <?php if ($display_program_name) : ?>
+
+                                    <!-- View Mode -->
+                                    <div id="profileViewMode" class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
-                                            <label class="text-sm font-medium text-gray-500">Programme</label>
-                                            <p class="mt-1 text-sm text-gray-900"><?php echo esc_html($display_program_name); ?></p>
+                                            <label class="text-sm font-medium text-gray-500">Full Name</label>
+                                            <p class="mt-1 text-sm text-gray-900"><?php echo esc_html($full_name); ?></p>
                                         </div>
-                                    <?php endif; ?>
-                                    <div>
-                                        <label class="text-sm font-medium text-gray-500">Email</label>
-                                        <p class="mt-1 text-sm text-gray-900"><?php echo esc_html($learner_data['email'] ?? 'N/A'); ?></p>
-                                    </div>
-                                    <div>
-                                        <label class="text-sm font-medium text-gray-500">Phone</label>
-                                        <p class="mt-1 text-sm text-gray-900"><?php echo esc_html($learner_data['phone'] ?? 'N/A'); ?></p>
-                                    </div>
-                                    <div>
-                                        <label class="text-sm font-medium text-gray-500">Date of Birth</label>
-                                        <p class="mt-1 text-sm text-gray-900"><?php echo !empty($learner_data['date_of_birth']) ? esc_html(date('F j, Y', strtotime($learner_data['date_of_birth']))) : 'N/A'; ?></p>
-                                    </div>
-                                    <div>
-                                        <label class="text-sm font-medium text-gray-500">Gender</label>
-                                        <p class="mt-1 text-sm text-gray-900"><?php echo esc_html(ucfirst($learner_data['gender'] ?? 'N/A')); ?></p>
-                                    </div>
-                                    <div>
-                                        <label class="text-sm font-medium text-gray-500">Address</label>
-                                        <p class="mt-1 text-sm text-gray-900">
-                                            <?php 
-                                            $address_parts = array_filter([
-                                                $learner_data['address'] ?? '',
-                                                $learner_data['city'] ?? '',
-                                                $learner_data['country'] ?? 'South Africa'
-                                            ]);
-                                            echo !empty($address_parts) ? esc_html(implode(', ', $address_parts)) : 'N/A';
-                                            ?>
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <?php if (!empty($latest_application)) : ?>
-                                <!-- Application status card -->
-                                <div class="lg:col-span-1 order-2">
-                                    <div class="bg-emerald-50 rounded-lg p-4">
-                                        <div class="text-xs font-semibold tracking-wide text-emerald-700 uppercase">Application status</div>
-                                        <div class="mt-1 text-lg font-semibold text-emerald-900">
-                                            <?php
-                                            $status_label = isset($latest_application['status'])
-                                                ? str_replace('_', ' ', $latest_application['status'])
-                                                : 'submitted';
-                                            echo esc_html(ucfirst($status_label));
-                                            ?>
+                                        <div>
+                                            <label class="text-sm font-medium text-gray-500">Student Number</label>
+                                            <p class="mt-1 text-sm text-gray-900"><?php echo esc_html($learner_data['student_number'] ?? 'N/A'); ?></p>
                                         </div>
-                                        <div class="mt-1 text-sm text-emerald-800">
-                                            <?php if (!empty($latest_application['course_name'])) : ?>
-                                                Applied for: <?php echo esc_html($latest_application['course_name']); ?>
-                                                <?php if (!empty($latest_application['level'])) : ?>
-                                                    (NQF <?php echo esc_html($latest_application['level']); ?>)
-                                                <?php endif; ?>
-                                            <?php endif; ?>
+                                        <div>
+                                            <label class="text-sm font-medium text-gray-500">Email</label>
+                                            <p class="mt-1 text-sm text-gray-900"><?php echo esc_html($learner_data['email'] ?? 'N/A'); ?></p>
                                         </div>
-                                        <?php if (!empty($latest_application['application_no'])) : ?>
-                                            <div class="mt-2 text-xs text-emerald-900/80">
-                                                Application number:
-                                                <span class="font-mono"><?php echo esc_html($latest_application['application_no']); ?></span>
-                                            </div>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            <?php endif; ?>
-                        </div>
-
-                        <!-- Recent Courses -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-                            <div class="flex items-center justify-between mb-4">
-                                <h2 class="text-xl font-semibold text-gray-900">Recent Courses</h2>
-                                <a href="<?php echo esc_url(nds_learner_portal_tab_url('courses')); ?>"
-                                   class="text-sm text-blue-600 hover:text-blue-700 font-medium">
-                                    View All
-                                </a>
-                            </div>
-                            <?php if (!empty($recent_enrollments)): ?>
-                                <div class="overflow-x-auto">
-                                    <table class="min-w-full divide-y divide-gray-200">
-                                        <thead class="bg-gray-50">
-                                            <tr>
-                                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Course</th>
-                                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Program</th>
-                                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Grade</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="bg-white divide-y divide-gray-200">
-                                            <?php foreach ($recent_enrollments as $enrollment): ?>
-                                                <tr>
-                                                    <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                                                        <?php echo esc_html($enrollment['course_name'] ?? 'N/A'); ?>
-                                                    </td>
-                                                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                                                        <?php echo esc_html($enrollment['program_name'] ?? 'N/A'); ?>
-                                                    </td>
-                                                    <td class="px-4 py-3 whitespace-nowrap">
-                                                        <span class="px-2 py-1 text-xs font-medium rounded-full 
-                                                            <?php 
-                                                            $enroll_status = $enrollment['status'] ?? '';
-                                                            echo $enroll_status === 'enrolled' ? 'bg-green-100 text-green-800' : 
-                                                                 ($enroll_status === 'completed' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800');
-                                                            ?>">
-                                                            <?php echo esc_html(ucfirst($enroll_status)); ?>
-                                                        </span>
-                                                    </td>
-                                                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                                                        <?php 
-                                                        if (!empty($enrollment['final_percentage'])) {
-                                                            echo esc_html($enrollment['final_percentage']) . '%';
-                                                        } elseif (!empty($enrollment['final_grade'])) {
-                                                            echo esc_html($enrollment['final_grade']);
-                                                        } else {
-                                                            echo 'N/A';
-                                                        }
-                                                        ?>
-                                                    </td>
-                                                </tr>
-                                            <?php endforeach; ?>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            <?php else: ?>
-                                <p class="text-gray-500 text-sm">No courses enrolled yet.</p>
-                            <?php endif; ?>
-                        </div>
-                        
-                        <!-- Upcoming Events Preview -->
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                            <div class="flex items-center justify-between mb-4">
-                                <h2 class="text-xl font-semibold text-gray-900">Upcoming Events</h2>
-                                <a href="<?php echo esc_url(nds_learner_portal_tab_url('timetable')); ?>"
-                                   class="text-sm text-blue-600 hover:text-blue-700 font-medium">
-                                    View Full Schedule
-                                </a>
-                            </div>
-                            <?php if (!empty($upcoming_events)): ?>
-                                <div class="space-y-3">
-                                    <?php foreach ($upcoming_events as $event): ?>
-                                        <div class="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-blue-200 transition-all cursor-pointer" onclick="showEventDetails(<?php echo htmlspecialchars(json_encode($event)); ?>)">
-                                            <div class="w-12 h-12 rounded-lg flex items-center justify-center
+                                        <div>
+                                            <label class="text-sm font-medium text-gray-500">Phone</label>
+                                            <p class="mt-1 text-sm text-gray-900"><?php echo esc_html($learner_data['phone'] ?? 'N/A'); ?></p>
+                                        </div>
+                                        <div>
+                                            <label class="text-sm font-medium text-gray-500">Date of Birth</label>
+                                            <p class="mt-1 text-sm text-gray-900"><?php echo !empty($learner_data['date_of_birth']) ? esc_html(date('F j, Y', strtotime($learner_data['date_of_birth']))) : 'N/A'; ?></p>
+                                        </div>
+                                        <div>
+                                            <label class="text-sm font-medium text-gray-500">Gender</label>
+                                            <p class="mt-1 text-sm text-gray-900"><?php echo esc_html(ucfirst($learner_data['gender'] ?? 'N/A')); ?></p>
+                                        </div>
+                                        <div class="md:col-span-2">
+                                            <label class="text-sm font-medium text-gray-500">Address</label>
+                                            <p class="mt-1 text-sm text-gray-900">
                                                 <?php
-                                                $type = $event['type'] ?? 'event';
-                                                switch($type) {
-                                                    case 'lecture':
-                                                        echo 'bg-blue-100 text-blue-600';
-                                                        break;
-                                                    case 'practical':
-                                                        echo 'bg-green-100 text-green-600';
-                                                        break;
-                                                    case 'tutorial':
-                                                        echo 'bg-amber-100 text-amber-600';
-                                                        break;
-                                                    case 'assessment':
-                                                        echo 'bg-red-100 text-red-600';
-                                                        break;
-                                                    case 'exam':
-                                                        echo 'bg-purple-100 text-purple-600';
-                                                        break;
-                                                    case 'holiday':
-                                                        echo 'bg-red-100 text-red-600';
-                                                        break;
-                                                    default:
-                                                        echo 'bg-gray-100 text-gray-600';
-                                                }
-                                                ?>">
-                                                <i class="fas 
-                                                    <?php
-                                                    switch($type) {
-                                                        case 'lecture':
-                                                            echo 'fa-chalkboard-teacher';
-                                                            break;
-                                                        case 'practical':
-                                                            echo 'fa-flask';
-                                                            break;
-                                                        case 'tutorial':
-                                                            echo 'fa-users';
-                                                            break;
-                                                        case 'assessment':
-                                                            echo 'fa-pencil-alt';
-                                                            break;
-                                                        case 'exam':
-                                                            echo 'fa-graduation-cap';
-                                                            break;
-                                                        case 'holiday':
-                                                            echo 'fa-umbrella-beach';
-                                                            break;
-                                                        default:
-                                                            echo 'fa-calendar-alt';
-                                                    }
-                                                    ?>"></i>
-                                            </div>
-                                            <div class="flex-1 ml-3">
-                                                <h4 class="font-medium text-gray-900"><?php echo esc_html($event['title']); ?></h4>
-                                                <p class="text-xs text-gray-500">
-                                                    <?php
-                                                    if (isset($event['is_recurring']) && $event['is_recurring']) {
-                                                        echo 'Every ' . $days_of_week[$event['day_of_week']] . ' at ' . substr($event['start_time'], 0, 5);
-                                                    } else {
-                                                        echo date('F j, Y', strtotime($event['date'])) . ' at ' . substr($event['start_time'], 0, 5);
-                                                    }
-                                                    ?>
-                                                </p>
-                                            </div>
-                                            <?php if (!empty($event['venue'])): ?>
-                                                <span class="text-xs text-gray-400">
-                                                    <i class="fas fa-map-marker-alt mr-1"></i>
-                                                    <?php echo esc_html($event['venue']); ?>
-                                                </span>
-                                            <?php endif; ?>
+                                                $address_parts = array_filter([
+                                                    $learner_data['address'] ?? '',
+                                                    $learner_data['city'] ?? '',
+                                                    $learner_data['country'] ?? 'South Africa'
+                                                ]);
+                                                echo !empty($address_parts) ? esc_html(implode(', ', $address_parts)) : 'N/A';
+                                                ?>
+                                            </p>
                                         </div>
-                                    <?php endforeach; ?>
+                                    </div>
+
+                                    <!-- Edit Mode -->
+                                    <form id="profileEditForm" method="POST" action="<?php echo admin_url('admin-post.php'); ?>" class="hidden grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <?php wp_nonce_field('nds_update_student_profile', 'nds_profile_nonce'); ?>
+                                        <input type="hidden" name="action" value="nds_update_student_profile">
+
+                                        <div>
+                                            <label for="first_name" class="text-sm font-medium text-gray-500">First Name *</label>
+                                            <input type="text" id="first_name" name="first_name" value="<?php echo esc_attr($learner_data['first_name'] ?? ''); ?>" required
+                                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                                        </div>
+                                        <div>
+                                            <label for="last_name" class="text-sm font-medium text-gray-500">Last Name *</label>
+                                            <input type="text" id="last_name" name="last_name" value="<?php echo esc_attr($learner_data['last_name'] ?? ''); ?>" required
+                                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                                        </div>
+                                        <div>
+                                            <label for="email" class="text-sm font-medium text-gray-500">Email *</label>
+                                            <input type="email" id="email" name="email" value="<?php echo esc_attr($learner_data['email'] ?? ''); ?>" required
+                                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                                        </div>
+                                        <div>
+                                            <label for="phone" class="text-sm font-medium text-gray-500">Phone</label>
+                                            <input type="tel" id="phone" name="phone" value="<?php echo esc_attr($learner_data['phone'] ?? ''); ?>"
+                                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                                        </div>
+                                        <div>
+                                            <label for="date_of_birth" class="text-sm font-medium text-gray-500">Date of Birth</label>
+                                            <input type="date" id="date_of_birth" name="date_of_birth" value="<?php echo esc_attr($learner_data['date_of_birth'] ?? ''); ?>"
+                                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                                        </div>
+                                        <div>
+                                            <label for="gender" class="text-sm font-medium text-gray-500">Gender</label>
+                                            <select id="gender" name="gender"
+                                                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                                                <option value="">Select Gender</option>
+                                                <option value="male" <?php selected($learner_data['gender'] ?? '', 'male'); ?>>Male</option>
+                                                <option value="female" <?php selected($learner_data['gender'] ?? '', 'female'); ?>>Female</option>
+                                                <option value="other" <?php selected($learner_data['gender'] ?? '', 'other'); ?>>Other</option>
+                                            </select>
+                                        </div>
+                                        <div class="md:col-span-2">
+                                            <label for="address" class="text-sm font-medium text-gray-500">Address</label>
+                                            <input type="text" id="address" name="address" value="<?php echo esc_attr($learner_data['address'] ?? ''); ?>" placeholder="Street address"
+                                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                                        </div>
+                                        <div>
+                                            <label for="city" class="text-sm font-medium text-gray-500">City</label>
+                                            <input type="text" id="city" name="city" value="<?php echo esc_attr($learner_data['city'] ?? ''); ?>"
+                                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                                        </div>
+                                        <div>
+                                            <label for="country" class="text-sm font-medium text-gray-500">Country</label>
+                                            <input type="text" id="country" name="country" value="<?php echo esc_attr($learner_data['country'] ?? 'South Africa'); ?>"
+                                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                                        </div>
+
+                                        <div class="md:col-span-2 flex justify-end space-x-3 pt-4">
+                                            <button type="button" id="cancelEditBtn" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                                                Cancel
+                                            </button>
+                                            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium">
+                                                Save Changes
+                                            </button>
+                                        </div>
+                                    </form>
                                 </div>
-                            <?php else: ?>
-                                <p class="text-gray-500 text-sm">No upcoming events scheduled.</p>
-                            <?php endif; ?>
+
+                                <!-- Enrolled Qualifications -->
+                                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                                    <h2 class="text-xl font-semibold text-gray-900 mb-4">Enrolled Qualifications</h2>
+                                    <?php if (!empty($enrolled_courses)): ?>
+                                        <div class="space-y-4">
+                                            <?php foreach ($enrolled_courses as $enrollment): ?>
+                                                <div class="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                                                    <div class="flex items-center justify-between mb-2">
+                                                        <h3 class="text-lg font-semibold text-gray-900">
+                                                            <?php echo esc_html($enrollment['course_name'] ?? 'Course'); ?>
+                                                        </h3>
+                                                        <span class="px-2 py-1 text-xs font-medium rounded-full
+                                                            <?php
+                                                            $status = $enrollment['status'] ?? 'active';
+                                                            echo $status === 'active' ? 'bg-green-100 text-green-800' :
+                                                                 ($status === 'completed' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800');
+                                                            ?>">
+                                                            <?php echo esc_html(ucfirst($status)); ?>
+                                                        </span>
+                                                    </div>
+                                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+                                                        <div>
+                                                            <span class="font-medium">Program:</span> <?php echo esc_html($enrollment['program_name'] ?? 'N/A'); ?>
+                                                        </div>
+                                                        <div>
+                                                            <span class="font-medium">Course Code:</span> <?php echo esc_html($enrollment['course_code'] ?? 'N/A'); ?>
+                                                        </div>
+                                                        <div>
+                                                            <span class="font-medium">Academic Year:</span> <?php echo esc_html($enrollment['year_name'] ?? 'N/A'); ?>
+                                                        </div>
+                                                        <div>
+                                                            <span class="font-medium">Semester:</span> <?php echo esc_html($enrollment['semester_name'] ?? 'N/A'); ?>
+                                                        </div>
+                                                        <div>
+                                                            <span class="font-medium">Enrolled:</span> <?php echo esc_html(date('M j, Y', strtotime($enrollment['created_at']))); ?>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <p class="text-gray-500 text-sm">No qualifications enrolled yet.</p>
+                                    <?php endif; ?>
+                                </div>
+
+                                <!-- Upcoming Events Preview (Moved here) -->
+                                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                                    <div class="flex items-center justify-between mb-4">
+                                        <h2 class="text-xl font-semibold text-gray-900">Upcoming Events</h2>
+                                        <a href="<?php echo esc_url(nds_learner_portal_tab_url('timetable')); ?>"
+                                           class="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                                            View Full Schedule
+                                        </a>
+                                    </div>
+                                    <?php if (!empty($upcoming_events)): ?>
+                                        <div class="space-y-3">
+                                            <?php foreach ($upcoming_events as $event): ?>
+                                                <div class="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-blue-200 transition-all cursor-pointer" onclick="showEventDetails(<?php echo htmlspecialchars(json_encode($event)); ?>)">
+                                                    <!-- ... event icon logic ... -->
+                                                    <div class="w-12 h-12 rounded-lg flex items-center justify-center
+                                                        <?php
+                                                        $type = $event['type'] ?? 'event';
+                                                        switch($type) {
+                                                            case 'lecture': echo 'bg-blue-100 text-blue-600'; break;
+                                                            case 'practical': echo 'bg-green-100 text-green-600'; break;
+                                                            case 'tutorial': echo 'bg-amber-100 text-amber-600'; break;
+                                                            case 'assessment': echo 'bg-red-100 text-red-600'; break;
+                                                            case 'exam': echo 'bg-purple-100 text-purple-600'; break;
+                                                            case 'holiday': echo 'bg-red-100 text-red-600'; break;
+                                                            default: echo 'bg-gray-100 text-gray-600';
+                                                        }
+                                                        ?>">
+                                                        <i class="fas 
+                                                            <?php
+                                                            switch($type) {
+                                                                case 'lecture': echo 'fa-chalkboard-teacher'; break;
+                                                                case 'practical': echo 'fa-flask'; break;
+                                                                case 'tutorial': echo 'fa-users'; break;
+                                                                case 'assessment': echo 'fa-pencil-alt'; break;
+                                                                case 'exam': echo 'fa-graduation-cap'; break;
+                                                                case 'holiday': echo 'fa-umbrella-beach'; break;
+                                                                default: echo 'fa-calendar-alt';
+                                                            }
+                                                            ?>"></i>
+                                                    </div>
+                                                    <div class="flex-1 ml-3">
+                                                        <h4 class="font-medium text-gray-900"><?php echo esc_html($event['title']); ?></h4>
+                                                        <p class="text-xs text-gray-500">
+                                                            <?php
+                                                            if (isset($event['is_recurring']) && $event['is_recurring']) {
+                                                                echo 'Every ' . $days_of_week[$event['day_of_week']] . ' at ' . substr($event['start_time'], 0, 5);
+                                                            } else {
+                                                                echo date('F j, Y', strtotime($event['date'])) . ' at ' . substr($event['start_time'], 0, 5);
+                                                            }
+                                                            ?>
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <p class="text-gray-500 text-sm">No upcoming events scheduled.</p>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+
+                            <!-- Sidebar Column -->
+                            <div class="lg:col-span-1 space-y-6">
+                                <?php if (!empty($latest_application)) : ?>
+                                    <!-- Application Status Card -->
+                                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                                        <div class="flex items-center justify-between mb-4">
+                                            <h2 class="text-lg font-semibold text-gray-900">Application</h2>
+                                            <span class="px-2 py-1 bg-emerald-100 text-emerald-800 text-xs font-medium rounded-full">
+                                                Active
+                                            </span>
+                                        </div>
+                                        <div class="bg-emerald-50 rounded-lg p-4">
+                                           <!-- ... app details ... -->
+                                            <div class="text-xs font-semibold tracking-wide text-emerald-700 uppercase">Status</div>
+                                            <div class="mt-1 text-lg font-semibold text-emerald-900">
+                                                <?php echo esc_html(ucfirst(str_replace('_', ' ', $latest_application['status'] ?? 'submitted'))); ?>
+                                            </div>
+                                            <div class="mt-2 text-sm text-emerald-800">
+                                                <?php echo esc_html($latest_application['course_name'] ?? ''); ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endif; ?>
+
+                                <!-- Enrolled Modules (Moved to Sidebar) -->
+                                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                                    <div class="flex items-center justify-between mb-4">
+                                        <h2 class="text-lg font-semibold text-gray-900">My Modules</h2>
+                                        <a href="<?php echo esc_url(nds_learner_portal_tab_url('courses')); ?>" class="text-sm text-blue-600 hover:text-blue-700 font-medium">View All</a>
+                                    </div>
+                                    <?php if (!empty($enrolled_modules)): ?>
+                                        <div class="space-y-4">
+                                            <?php
+                                            $recent_modules = array_slice($enrolled_modules, 0, 5);
+                                            foreach ($recent_modules as $module):
+                                            ?>
+                                                <div class="p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-blue-200 transition-colors group">
+                                                    <div class="flex justify-between items-start mb-2">
+                                                        <div class="font-medium text-gray-900 text-sm leading-tight">
+                                                            <?php echo esc_html($module['module_name'] ?? 'Module'); ?>
+                                                        </div>
+                                                        <span class="ml-2 px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-blue-100 text-blue-800">
+                                                            <?php echo esc_html($module['module_code'] ?? ''); ?>
+                                                        </span>
+                                                    </div>
+                                                    <div class="text-xs text-gray-500 mb-2">
+                                                        <?php echo esc_html($module['course_name'] ?? ''); ?>
+                                                    </div>
+                                                    
+                                                    <?php if (!empty($module['final_percentage'])): ?>
+                                                        <div class="mt-2">
+                                                            <div class="flex justify-between text-xs text-gray-500 mb-1">
+                                                                <span>Progress</span>
+                                                                <span class="font-medium text-gray-700"><?php echo number_format($module['final_percentage'], 1); ?>%</span>
+                                                            </div>
+                                                            <div class="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                                                                <div class="bg-blue-600 h-1.5 rounded-full transition-all duration-500" style="width: <?php echo $module['final_percentage']; ?>%"></div>
+                                                            </div>
+                                                        </div>
+                                                    <?php else: ?>
+                                                        <div class="mt-2 flex items-center text-xs text-gray-500">
+                                                            <i class="fas fa-clock mr-1"></i> In Progress
+                                                        </div>
+                                                    <?php endif; ?>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <p class="text-gray-500 text-sm">No modules enrolled yet.</p>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        
                         </div>
                         <?php
                         break;
 
                     case 'courses':
-                        // Group courses by program
-                        $courses_by_program = [];
-                        foreach ($enrollments as $row) {
+                        // Group modules by program
+                        $modules_by_program = [];
+                        foreach ($enrolled_modules as $row) {
                             $pid   = $row['program_id'] ?? 0;
                             $pname = $row['program_name'] ?? __('Unassigned Program', 'nds-school');
-                            if (!isset($courses_by_program[$pid])) {
-                                $courses_by_program[$pid] = [
+                            if (!isset($modules_by_program[$pid])) {
+                                $modules_by_program[$pid] = [
                                     'name'    => $pname,
                                     'rows'    => [],
                                 ];
                             }
-                            $courses_by_program[$pid]['rows'][] = $row;
+                            $modules_by_program[$pid]['rows'][] = $row;
                         }
                         ?>
                         <h2 class="text-lg font-semibold text-gray-900 mb-4">Programme Modules</h2>
-                        <?php if (empty($courses_by_program)) : ?>
-                            <p class="text-sm text-gray-600">You are not enrolled in any courses yet.</p>
+                        <?php if (empty($modules_by_program)) : ?>
+                            <p class="text-sm text-gray-600">You are not enrolled in any modules yet.</p>
                         <?php else : ?>
                             <div class="space-y-6">
-                                <?php foreach ($courses_by_program as $program): ?>
+                                <?php foreach ($modules_by_program as $program): ?>
                                     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                                         <h3 class="text-md font-semibold text-gray-900 mb-3">
                                             <?php echo esc_html($program['name']); ?>
@@ -1785,8 +1935,9 @@ $upcoming_events = array_slice($upcoming_events, 0, 10);
                                             <table class="min-w-full divide-y divide-gray-200 text-sm">
                                                 <thead class="bg-gray-100">
                                                 <tr>
-                                                    <th class="px-3 py-2 text-left font-medium text-gray-700">Course</th>
+                                                    <th class="px-3 py-2 text-left font-medium text-gray-700">Module</th>
                                                     <th class="px-3 py-2 text-left font-medium text-gray-700">Code</th>
+                                                    <th class="px-3 py-2 text-left font-medium text-gray-700">Type</th>
                                                     <th class="px-3 py-2 text-left font-medium text-gray-700">Year / Semester</th>
                                                     <th class="px-3 py-2 text-left font-medium text-gray-700">Status</th>
                                                     <th class="px-3 py-2 text-left font-medium text-gray-700">Progress</th>
@@ -1796,10 +1947,13 @@ $upcoming_events = array_slice($upcoming_events, 0, 10);
                                                 <?php foreach ($program['rows'] as $row): ?>
                                                     <tr>
                                                         <td class="px-3 py-2 text-gray-800">
-                                                            <?php echo esc_html($row['course_name'] ?? 'Course'); ?>
+                                                            <?php echo esc_html($row['module_name'] ?? 'Module'); ?>
                                                         </td>
                                                         <td class="px-3 py-2 text-gray-700">
-                                                            <?php echo esc_html($row['course_code'] ?? ''); ?>
+                                                            <?php echo esc_html($row['module_code'] ?? ''); ?>
+                                                        </td>
+                                                        <td class="px-3 py-2 text-gray-700">
+                                                            <?php echo esc_html(ucfirst($row['module_type'] ?? 'theory')); ?>
                                                         </td>
                                                         <td class="px-3 py-2 text-gray-700">
                                                             <?php
@@ -1935,12 +2089,25 @@ $upcoming_events = array_slice($upcoming_events, 0, 10);
                                                         <div class="timetable-cell">
                                                             <?php
                                                             $classes_at_time = array_filter($timetable_data, function($class) use ($day_num, $time) {
-                                                                return $class['day_of_week'] == $day_num && 
-                                                                       substr($class['start_time'], 0, 5) == $time;
+                                                                // Check if this class occurs on the current day
+                                                                $class_days = explode(',', $class['days']);
+                                                                $day_names = ['Mon' => 1, 'Tue' => 2, 'Wed' => 3, 'Thu' => 4, 'Fri' => 5, 'Sat' => 6, 'Sun' => 7];
+                                                                $current_day_name = array_search($day_num, $day_names);
+                                                                
+                                                                $class_occurs_today = false;
+                                                                foreach ($class_days as $day) {
+                                                                    $day = trim($day);
+                                                                    if (isset($day_names[$day]) && $day_names[$day] == $day_num) {
+                                                                        $class_occurs_today = true;
+                                                                        break;
+                                                                    }
+                                                                }
+                                                                
+                                                                return $class_occurs_today && substr($class['start_time'], 0, 5) == $time;
                                                             });
                                                             
                                                             foreach ($classes_at_time as $class):
-                                                                $class_type = $class['class_type'] ?? 'lecture';
+                                                                $class_type = $class['session_type'] ?? 'lecture';
                                                                 $type_class = '';
                                                                 $type_icon = '';
                                                                 
@@ -1963,21 +2130,21 @@ $upcoming_events = array_slice($upcoming_events, 0, 10);
                                                                 }
                                                             ?>
                                                                 <div class="<?php echo $type_class; ?>" onclick="showEventDetails(<?php echo htmlspecialchars(json_encode($class)); ?>)">
-                                                                    <span class="course-code">
-                                                                        <?php echo esc_html($class['course_code'] ?? ''); ?>
+                                                                    <span class="module-code">
+                                                                        <?php echo esc_html($class['display_code'] ?? $class['course_code']); ?>
                                                                     </span>
-                                                                    <span class="course-name">
-                                                                        <?php echo esc_html($class['course_name'] ?? ''); ?>
+                                                                    <span class="module-name">
+                                                                        <?php echo esc_html($class['display_name'] ?? $class['course_name']); ?>
                                                                     </span>
                                                                     <span class="venue">
                                                                         <i class="fas <?php echo $type_icon; ?>"></i>
                                                                         <?php 
                                                                         $venue = '';
-                                                                        if (!empty($class['building'])) {
-                                                                            $venue .= $class['building'] . ' ';
+                                                                        if (!empty($class['venue_name'])) {
+                                                                            $venue .= $class['venue_name'];
                                                                         }
-                                                                        if (!empty($class['room_number'])) {
-                                                                            $venue .= 'Rm ' . $class['room_number'];
+                                                                        if (!empty($class['room_code'])) {
+                                                                            $venue .= ' (' . $class['room_code'] . ')';
                                                                         }
                                                                         echo esc_html($venue ?: 'TBC');
                                                                         ?>
@@ -2022,32 +2189,32 @@ $upcoming_events = array_slice($upcoming_events, 0, 10);
                                     </div>
                                 </div>
                                 
-                                <!-- Enrolled Courses Sidebar -->
+                                <!-- Enrolled Modules Sidebar -->
                                 <div class="lg:col-span-1">
                                     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5 sticky top-6">
                                         <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                                             <i class="fas fa-book-open text-blue-600 mr-2"></i>
-                                            My Courses
+                                            My Modules
                                         </h3>
                                         
-                                        <?php if (!empty($enrollments)): ?>
+                                        <?php if (!empty($enrolled_modules)): ?>
                                             <div class="space-y-3 max-h-[600px] overflow-y-auto pr-2">
-                                                <?php foreach ($enrollments as $course): ?>
+                                                <?php foreach ($enrolled_modules as $module): ?>
                                                     <div class="p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-blue-200 transition-colors">
                                                         <div class="font-medium text-gray-900 text-sm">
-                                                            <?php echo esc_html($course['course_name'] ?? 'Course'); ?>
+                                                            <?php echo esc_html($module['module_name'] ?? 'Module'); ?>
                                                         </div>
                                                         <div class="text-xs text-gray-500 mt-1">
-                                                            <?php echo esc_html($course['course_code'] ?? ''); ?>
+                                                            <?php echo esc_html($module['module_code'] ?? ''); ?>
                                                         </div>
-                                                        <?php if (!empty($course['final_percentage'])): ?>
+                                                        <?php if (!empty($module['final_percentage'])): ?>
                                                             <div class="mt-2">
                                                                 <div class="flex justify-between text-xs mb-1">
                                                                     <span>Progress</span>
-                                                                    <span><?php echo number_format($course['final_percentage'], 1); ?>%</span>
+                                                                    <span><?php echo number_format($module['final_percentage'], 1); ?>%</span>
                                                                 </div>
                                                                 <div class="w-full bg-gray-200 rounded-full h-1.5">
-                                                                    <div class="bg-blue-600 h-1.5 rounded-full" style="width: <?php echo $course['final_percentage']; ?>%"></div>
+                                                                    <div class="bg-blue-600 h-1.5 rounded-full" style="width: <?php echo $module['final_percentage']; ?>%"></div>
                                                                 </div>
                                                             </div>
                                                         <?php endif; ?>
@@ -2055,7 +2222,7 @@ $upcoming_events = array_slice($upcoming_events, 0, 10);
                                                 <?php endforeach; ?>
                                             </div>
                                         <?php else: ?>
-                                            <p class="text-sm text-gray-500">No courses enrolled yet.</p>
+                                            <p class="text-sm text-gray-500">No modules enrolled yet.</p>
                                         <?php endif; ?>
                                     </div>
                                 </div>
@@ -2625,7 +2792,8 @@ function ndsOpenNotificationModal(title, message, type) {
     if (dropdown) dropdown.classList.add('hidden');
 
     titleEl.textContent = title;
-    messageEl.textContent = message;
+    // message may contain HTML markup
+    messageEl.innerHTML = message;
 
     const types = {
         'info': { icon: 'fa-info-circle', color: 'blue', label: 'Information' },
@@ -2706,7 +2874,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (e.target.closest('.nds-mark-read')) return;
 
             const title = this.querySelector('p.text-base').textContent.trim();
-            const message = this.querySelector('p.text-sm').textContent.trim();
+            const msgEl = this.querySelector('p.text-sm');
+            const message = msgEl ? msgEl.innerHTML.trim() : '';
             const type = this.dataset.type || 'info';
 
             ndsOpenNotificationModal(title, message, type);
@@ -2749,6 +2918,28 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             badge.remove();
         }
+    }
+});
+
+// Profile editing functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const editBtn = document.getElementById('editProfileBtn');
+    const cancelBtn = document.getElementById('cancelEditBtn');
+    const viewMode = document.getElementById('profileViewMode');
+    const editForm = document.getElementById('profileEditForm');
+
+    if (editBtn && cancelBtn && viewMode && editForm) {
+        editBtn.addEventListener('click', function() {
+            viewMode.classList.add('hidden');
+            editForm.classList.remove('hidden');
+            editBtn.classList.add('hidden');
+        });
+
+        cancelBtn.addEventListener('click', function() {
+            editForm.classList.add('hidden');
+            viewMode.classList.remove('hidden');
+            editBtn.classList.remove('hidden');
+        });
     }
 });
 </script>

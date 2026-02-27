@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
 
 class NDS_Database_Migration {
     
-    private $version = '2.1.0';
+    private $version = '2.2.0';
     private $current_version;
     
     public function __construct() {
@@ -177,6 +177,47 @@ class NDS_Database_Migration {
 
         $courses = $wpdb->prefix . 'nds_courses';
         $staff = $wpdb->prefix . 'nds_staff';
+        $modules = $wpdb->prefix . 'nds_modules';
+
+        // Check if nds_timetable table exists and alter it to add module_id
+        $timetable_table = $wpdb->prefix . 'nds_timetable';
+        if ($wpdb->get_var("SHOW TABLES LIKE '$timetable_table'") == $timetable_table) {
+            // Check if module_id column exists
+            $columns = $wpdb->get_results("DESCRIBE $timetable_table");
+            $has_module_id = false;
+            foreach ($columns as $column) {
+                if ($column->Field == 'module_id') {
+                    $has_module_id = true;
+                    break;
+                }
+            }
+            
+            if (!$has_module_id) {
+                $wpdb->query("ALTER TABLE $timetable_table ADD COLUMN module_id INT NULL AFTER course_id");
+                $this->log('Added module_id column to nds_timetable table');
+            }
+        }
+
+        // Check if nds_modules table exists and alter column name if needed
+        $modules_table = $wpdb->prefix . 'nds_modules';
+        if ($wpdb->get_var("SHOW TABLES LIKE '$modules_table'") == $modules_table) {
+            $columns = $wpdb->get_results("DESCRIBE $modules_table");
+            $has_module_code = false;
+            $has_code = false;
+            foreach ($columns as $column) {
+                if ($column->Field == 'module_code') {
+                    $has_module_code = true;
+                }
+                if ($column->Field == 'code') {
+                    $has_code = true;
+                }
+            }
+            
+            if ($has_module_code && !$has_code) {
+                $wpdb->query("ALTER TABLE $modules_table CHANGE module_code code VARCHAR(20) UNIQUE NOT NULL");
+                $this->log('Renamed module_code to code in nds_modules table');
+            }
+        }
 
         $table_course_schedules = $wpdb->prefix . 'nds_course_schedules';
         $sql_course_schedules = "CREATE TABLE IF NOT EXISTS $table_course_schedules (

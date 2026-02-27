@@ -15,7 +15,7 @@ function nds_handle_course_data($request_type = 'POST') {
         'name'           => isset($request_data['name']) ? sanitize_text_field($request_data['name']) : (isset($request_data['course_name']) ? sanitize_text_field($request_data['course_name']) : ''),
         'nqf_level'      => isset($request_data['nqf_level']) ? intval($request_data['nqf_level']) : 0,
         'description'    => isset($request_data['description']) ? sanitize_textarea_field($request_data['description']) : '',
-        // 'duration' removed - column doesn't exist in database (use duration_weeks if needed)
+        'duration_weeks' => isset($request_data['duration']) ? intval($request_data['duration']) : (isset($request_data['duration_weeks']) ? intval($request_data['duration_weeks']) : 0),
         'credits'        => isset($request_data['credits']) ? intval($request_data['credits']) : 0,
         'price'          => isset($request_data['price']) ? floatval($request_data['price']) : 0.0,
         'currency'       => "ZAR",  // Assuming currency is ZAR for now
@@ -198,7 +198,7 @@ function nds_add_course()
 {
  
     // Check nonce and permissions
-    if (!isset($_POST['nds_add_course_nonce']) || !wp_verify_nonce($_POST['nds_add_course_nonce'], 'nds_add_course_nonce')) {
+    if (!isset($_POST['nds_add_nonce']) || !wp_verify_nonce($_POST['nds_add_nonce'], 'nds_add_course_nonce')) {
         wp_die('Security check Add Course failed');
     }
     if (!current_user_can('manage_options')) {
@@ -222,7 +222,7 @@ function nds_add_course()
         $wpdb->query("ALTER TABLE $courses_table ADD COLUMN color VARCHAR(7) NULL AFTER end_date");
     }
 
-    $data = nds_handle_course_data('POST', true); // Generate code automatically
+    $data = nds_handle_course_data('POST'); // Generate code automatically
     
     // Validate required fields
     if (empty($data['name']) || empty($data['program_id'])) {
@@ -286,9 +286,8 @@ function nds_add_course()
     $format_array = ['%d', '%s', '%s', '%s', '%d', '%d', '%f', '%s', '%s', '%s', '%s', '%s'];
     
     // Add optional fields if they exist
-    if (!empty($data['duration'])) {
-        // Convert duration to weeks if needed, or store as-is
-        $insert_data['duration_weeks'] = intval($data['duration']);
+    if (!empty($data['duration_weeks'])) {
+        $insert_data['duration_weeks'] = $data['duration_weeks'];
         $format_array[] = '%d';
     }
     
@@ -310,12 +309,44 @@ function nds_add_course()
         wp_die('Failed to create course. Please try again.');
     }
 
+    // Handle Modules
+    if (isset($_POST['modules']) && is_array($_POST['modules'])) {
+        $modules_table = $wpdb->prefix . 'nds_modules';
+        foreach ($_POST['modules'] as $module_data) {
+            // Skip placeholders or empty rows
+            if (empty($module_data['code']) && empty($module_data['name'])) {
+                continue;
+            }
+            
+            $wpdb->insert(
+                $modules_table,
+                [
+                    'course_id' => $course_id,
+                    'code' => sanitize_text_field($module_data['code']),
+                    'name' => sanitize_text_field($module_data['name']),
+                    'type' => !empty($module_data['type']) ? sanitize_text_field($module_data['type']) : 'theory',
+                    'duration_hours' => !empty($module_data['duration_hours']) ? intval($module_data['duration_hours']) : null,
+                    'status' => 'active'
+                ],
+                ['%d', '%s', '%s', '%s', '%d', '%s']
+            );
+        }
+    }
+
+    // Initialize redirect URL
+    $redirect_url = admin_url('admin.php?page=nds-courses');
+    if (!empty($data['program_id'])) {
+        $redirect_url = add_query_arg('program_id', $data['program_id'], $redirect_url);
+    }
+    $redirect_url = add_query_arg('course_created', 'success', $redirect_url);
+
     // Handle course schedules (multiple schedules per course allowed)
     if (isset($_POST['schedule']) && is_array($_POST['schedule'])) {
         $schedules_table = $wpdb->prefix . 'nds_course_schedules';
         $overlap_errors = [];
         
         foreach ($_POST['schedule'] as $index => $schedule_data) {
+            // ... existing day handling code ...
             // Handle days - can be array (from checkboxes) or string (from hidden input)
             // Convert full day names to abbreviations for database SET column
             $day_name_to_abbr = array(
@@ -404,6 +435,7 @@ function nds_add_course()
             // Prepare schedule data
             $schedule_insert = [
                 'course_id' => $course_id,
+                'module_id' => !empty($schedule_data['module_id']) ? intval($schedule_data['module_id']) : null,
                 'lecturer_id' => !empty($schedule_data['lecturer_id']) ? intval($schedule_data['lecturer_id']) : null,
                 'days' => $days,
                 'start_time' => $start_time,
@@ -424,7 +456,7 @@ function nds_add_course()
             $wpdb->insert(
                 $schedules_table,
                 $schedule_insert,
-                ['%d', '%d', '%s', '%s', '%s', '%f', '%s', '%s', '%d']
+                ['%d', '%d', '%d', '%s', '%s', '%s', '%f', '%s', '%s', '%d']
             );
         }
         
@@ -441,13 +473,6 @@ function nds_add_course()
     if (function_exists('nds_clear_calendar_cache')) {
         nds_clear_calendar_cache();
     }
-    
-    // Redirect back to courses page with success message
-    $redirect_url = admin_url('admin.php?page=nds-courses');
-    if (!empty($data['program_id'])) {
-        $redirect_url = add_query_arg('program_id', $data['program_id'], $redirect_url);
-    }
-    $redirect_url = add_query_arg('course_created', 'success', $redirect_url);
     
     wp_redirect($redirect_url);
     exit;
@@ -523,7 +548,7 @@ function nds_handle_update_course()
         // Build format specifiers dynamically based on what's in update_data
         $format_specifiers = [];
         foreach ($update_data as $key => $value) {
-            if ($key === 'program_id' || $key === 'nqf_level' || $key === 'credits') {
+            if ($key === 'program_id' || $key === 'nqf_level' || $key === 'credits' || $key === 'duration_weeks') {
                 $format_specifiers[] = '%d';
             } elseif ($key === 'price') {
                 $format_specifiers[] = '%f';
@@ -543,16 +568,69 @@ function nds_handle_update_course()
         );
 
         if ($updated !== false) {
-            // Handle course schedules update (delete old, insert new)
+            
+            // Handle Modules (Update, Insert, Delete)
+            if (isset($_POST['modules']) && is_array($_POST['modules'])) {
+                $modules_table = $wpdb->prefix . 'nds_modules';
+                $submitted_module_ids = [];
+                
+                foreach ($_POST['modules'] as $module_data) {
+                    // Skip if both code and name are empty
+                    if (empty($module_data['code']) && empty($module_data['name'])) {
+                        continue;
+                    }
+                    
+                    $mod_id = !empty($module_data['id']) ? intval($module_data['id']) : 0;
+                    $mod_data = [
+                        'course_id' => $course_id,
+                        'code' => sanitize_text_field($module_data['code']),
+                        'name' => sanitize_text_field($module_data['name']),
+                        'type' => !empty($module_data['type']) ? sanitize_text_field($module_data['type']) : 'theory',
+                        'duration_hours' => !empty($module_data['duration_hours']) ? intval($module_data['duration_hours']) : null,
+                        'status' => 'active'
+                    ];
+                    $mod_format = ['%d', '%s', '%s', '%s', '%d', '%s'];
+                    
+                    if ($mod_id > 0) {
+                        // Update existing
+                        $wpdb->update($modules_table, $mod_data, ['id' => $mod_id, 'course_id' => $course_id], $mod_format, ['%d', '%d']);
+                        $submitted_module_ids[] = $mod_id;
+                    } else {
+                        // Insert new
+                        $wpdb->insert($modules_table, $mod_data, $mod_format);
+                        $submitted_module_ids[] = $wpdb->insert_id;
+                    }
+                }
+                
+                // Delete removed modules
+                $existing_ids = $wpdb->get_col($wpdb->prepare("SELECT id FROM $modules_table WHERE course_id = %d", $course_id));
+                $to_delete = array_diff($existing_ids, $submitted_module_ids);
+                
+                if (!empty($to_delete)) {
+                    $ids_str = implode(',', array_map('intval', $to_delete));
+                    $wpdb->query("DELETE FROM $modules_table WHERE id IN ($ids_str)");
+                }
+            }
+
+            // Handle course schedules (delete old, insert new)
             if (isset($_POST['schedule']) && is_array($_POST['schedule'])) {
                 $schedules_table = $wpdb->prefix . 'nds_course_schedules';
                 $overlap_errors = [];
                 
-                // Get existing schedule IDs before deletion (for overlap checking)
-                $existing_schedule_ids = $wpdb->get_col($wpdb->prepare(
-                    "SELECT id FROM {$schedules_table} WHERE course_id = %d",
+                // Get existing schedules before deletion for change detection
+                $old_schedules = $wpdb->get_results($wpdb->prepare(
+                    "SELECT module_id, days, start_time, end_time, session_type, location 
+                     FROM {$schedules_table} 
+                     WHERE course_id = %d AND module_id IS NOT NULL",
                     $course_id
-                ));
+                ), ARRAY_A);
+                
+                // Group old schedules by module_id for easier comparison
+                $old_schedule_by_module = [];
+                foreach ($old_schedules as $old_sched) {
+                    $key = $old_sched['module_id'];
+                    $old_schedule_by_module[$key] = $old_sched;
+                }
                 
                 // Delete existing schedules for this course
                 $wpdb->delete(
@@ -568,6 +646,7 @@ function nds_handle_update_course()
                 ));
                 
                 // Insert new schedules
+                $new_schedule_by_module = [];
                 foreach ($_POST['schedule'] as $index => $schedule_data) {
                     // Handle days - can be array (from checkboxes) or string (from hidden input)
                     // Convert full day names to abbreviations for database SET column
@@ -659,6 +738,7 @@ function nds_handle_update_course()
                     // Prepare schedule data
                     $schedule_insert = [
                         'course_id' => $course_id,
+                        'module_id' => !empty($schedule_data['module_id']) ? intval($schedule_data['module_id']) : null,
                         'lecturer_id' => !empty($schedule_data['lecturer_id']) ? intval($schedule_data['lecturer_id']) : null,
                         'days' => $days,
                         'start_time' => $start_time,
@@ -679,9 +759,23 @@ function nds_handle_update_course()
                     $wpdb->insert(
                         $schedules_table,
                         $schedule_insert,
-                        ['%d', '%d', '%s', '%s', '%s', '%f', '%s', '%s', '%d']
+                        ['%d', '%d', '%d', '%s', '%s', '%s', '%f', '%s', '%s', '%d']
                     );
+                    
+                    // Collect new schedule data for change detection
+                    if ($schedule_insert['module_id']) {
+                        $new_schedule_by_module[$schedule_insert['module_id']] = [
+                            'days' => $schedule_insert['days'],
+                            'start_time' => $schedule_insert['start_time'],
+                            'end_time' => $schedule_insert['end_time'],
+                            'session_type' => $schedule_insert['session_type'],
+                            'location' => $schedule_insert['location']
+                        ];
+                    }
                 }
+                
+                // Check for schedule changes and send notifications
+                nds_check_schedule_changes_and_notify($course_id, $old_schedule_by_module, $new_schedule_by_module);
                 
                 // If there were overlap errors, add notice
                 if (!empty($overlap_errors)) {
@@ -914,4 +1008,140 @@ function nds_get_courses()
     $courses_table = $wpdb->prefix . "nds_courses";
     // FIX: Remove the unnecessary prepare() call
     return $wpdb->get_results("SELECT * FROM {$courses_table} ORDER BY name ASC", ARRAY_A);
+}
+
+/**
+ * Check for schedule changes and send notifications to affected students
+ * @param int $course_id The course ID
+ * @param array $old_schedules Old schedules keyed by module_id
+ * @param array $new_schedules New schedules keyed by module_id
+ */
+function nds_check_schedule_changes_and_notify($course_id, $old_schedules, $new_schedules) {
+    global $wpdb;
+    
+    // Verify course exists
+    $course_name = $wpdb->get_var($wpdb->prepare(
+        "SELECT name FROM {$wpdb->prefix}nds_courses WHERE id = %d",
+        $course_id
+    ));
+    
+    if (!$course_name) {
+        error_log('[NDS] Schedule change notification: Course not found - ID: ' . $course_id);
+        return;
+    }
+    
+    // Get module names for better notification messages
+    $module_ids = array_unique(array_merge(array_keys($old_schedules), array_keys($new_schedules)));
+    if (empty($module_ids)) {
+        return;
+    }
+    
+    $module_names = $wpdb->get_results($wpdb->prepare(
+        "SELECT id, name FROM {$wpdb->prefix}nds_modules WHERE id IN (" . implode(',', array_fill(0, count($module_ids), '%d')) . ")",
+        $module_ids
+    ), OBJECT_K);
+    
+    $notifications_sent = 0;
+    
+    // Check each module for changes
+    foreach ($module_ids as $module_id) {
+        $old_sched = isset($old_schedules[$module_id]) ? $old_schedules[$module_id] : null;
+        $new_sched = isset($new_schedules[$module_id]) ? $new_schedules[$module_id] : null;
+        
+        // Skip if no schedule existed and none was added
+        if (!$old_sched && !$new_sched) {
+            continue;
+        }
+        
+        $has_changes = false;
+        $changes = [];
+        
+        if (!$old_sched && $new_sched) {
+            // New schedule added
+            $has_changes = true;
+            $changes[] = "✓ New schedule added";
+        } elseif ($old_sched && !$new_sched) {
+            // Schedule removed
+            $has_changes = true;
+            $changes[] = "✗ Schedule removed";
+        } elseif ($old_sched && $new_sched) {
+            // Check for time/location changes
+            if (isset($old_sched['start_time']) && isset($new_sched['start_time']) && $old_sched['start_time'] !== $new_sched['start_time']) {
+                $has_changes = true;
+                $old_time = date('H:i', strtotime($old_sched['start_time']));
+                $new_time = date('H:i', strtotime($new_sched['start_time']));
+                $changes[] = sprintf("Start time changed: %s → %s", $old_time, $new_time);
+            }
+            if (isset($old_sched['end_time']) && isset($new_sched['end_time']) && $old_sched['end_time'] !== $new_sched['end_time']) {
+                $has_changes = true;
+                $old_time = date('H:i', strtotime($old_sched['end_time']));
+                $new_time = date('H:i', strtotime($new_sched['end_time']));
+                $changes[] = sprintf("End time changed: %s → %s", $old_time, $new_time);
+            }
+            if (isset($old_sched['days']) && isset($new_sched['days']) && $old_sched['days'] !== $new_sched['days']) {
+                $has_changes = true;
+                $changes[] = sprintf("Days changed: %s → %s", $old_sched['days'], $new_sched['days']);
+            }
+            if (isset($old_sched['location']) && isset($new_sched['location']) && $old_sched['location'] !== $new_sched['location']) {
+                $has_changes = true;
+                $old_loc = $old_sched['location'] ?: 'Not set';
+                $new_loc = $new_sched['location'] ?: 'Not set';
+                $changes[] = sprintf("Location changed: %s → %s", $old_loc, $new_loc);
+            }
+        }
+        
+        if ($has_changes) {
+            // Find students enrolled in this module
+            $enrolled_students = $wpdb->get_col($wpdb->prepare(
+                "SELECT DISTINCT se.student_id 
+                 FROM {$wpdb->prefix}nds_student_enrollments se
+                 INNER JOIN {$wpdb->prefix}nds_student_modules sm ON se.id = sm.enrollment_id
+                 WHERE sm.module_id = %d AND se.status IN ('active', 'enrolled')",
+                $module_id
+            ));
+            
+            if (!empty($enrolled_students)) {
+                $module_name = isset($module_names[$module_id]) ? $module_names[$module_id]->name : 'Module ' . $module_id;
+                
+                foreach ($enrolled_students as $student_id) {
+                    $title = "Schedule Updated: " . $module_name;
+                    // create HTML list for changes using tailwind classes for spacing
+                    $changes_html = '<ul class="ml-4 mt-2 mb-2 list-disc">';
+                    foreach ($changes as $change) {
+                        // choose emoji icon similar to ajax handler
+                        $icon = '📍';
+                        if (strpos($change, 'Days') === 0) $icon = '📅';
+                        if (strpos($change, 'Start') === 0 || strpos($change, 'End') === 0) $icon = '🕐';
+                        if (strpos($change, 'location') === 0 || strpos($change, 'Location') === 0) $icon = '🏢';
+                        if (strpos($change, 'New') === 0) $icon = '✅';
+                        $changes_html .= '<li>' . esc_html($icon . ' ' . $change) . '</li>';
+                    }
+                    $changes_html .= '</ul>';
+
+                    $message = 'The schedule for ' . esc_html($module_name) . ' in ' . esc_html($course_name) . ' has been updated:';
+                    $message .= '<br><br>' . $changes_html;
+                    $message .= '<br><br>Please check your timetable for complete details.';
+                    
+                    // Send notification
+                    $notification_id = nds_create_notification(
+                        $student_id,
+                        $title,
+                        $message,
+                        'timetable',
+                        '/portal/timetable/'
+                    );
+                    
+                    if ($notification_id) {
+                        $notifications_sent++;
+                    }
+                }
+                
+                error_log('[NDS] Schedule change notifications sent - Module: ' . $module_name . 
+                         ', Students notified: ' . count($enrolled_students) . 
+                         ', Course: ' . $course_name);
+            }
+        }
+    }
+    
+    return $notifications_sent;
 }

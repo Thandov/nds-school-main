@@ -53,6 +53,8 @@ function nds_school_create_tables()
     $t_application_reviews      = $wpdb->prefix . 'nds_application_reviews';
     $t_application_payments     = $wpdb->prefix . 'nds_application_payments';
     $t_notifications            = $wpdb->prefix . 'nds_notifications';
+    $t_certificates             = $wpdb->prefix . 'nds_certificates';
+    $t_payments                 = $wpdb->prefix . 'nds_payments';
 
     // -------------------------------------------------------------------------
     // 1. FACULTIES (Schools/Colleges)
@@ -104,7 +106,7 @@ function nds_school_create_tables()
         ['bachelor', 'Bachelor\'s Degree', 3, 'undergraduate'],
         ['honours', 'Honours Degree', 1, 'undergraduate'],
         ['masters', 'Master\'s Degree', 2, 'postgraduate'],
-        ['phd', 'Doctor of Philosophy', 3, 'postgraduate'],
+        ['phd', 'Courses of Philosophy', 3, 'postgraduate'],
         ['certificate', 'Certificate', 0, 'professional'],
         ['short_course', 'Short Course', 0, 'professional']
     ];
@@ -329,17 +331,17 @@ function nds_school_create_tables()
     // -------------------------------------------------------------------------
     $sql_modules = "CREATE TABLE IF NOT EXISTS $t_modules (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        module_code VARCHAR(20) UNIQUE NOT NULL,
+        code VARCHAR(20) UNIQUE NOT NULL,
         name VARCHAR(255) NOT NULL,
         course_id INT NOT NULL,
         type ENUM('theory','practical','workplace','assessment') DEFAULT 'theory',
-        hours INT,
-        nqf_level INT,
+        duration_hours INT,
+        description TEXT,
+        status ENUM('active','inactive','draft') DEFAULT 'active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (course_id) REFERENCES $t_courses(id) ON DELETE CASCADE,
         INDEX idx_course (course_id),
-        INDEX idx_module_code (module_code),
+        INDEX idx_code (code),
         INDEX idx_type (type)
     ) $charset_collate;";
     dbDelta($sql_modules);
@@ -475,6 +477,29 @@ function nds_school_create_tables()
         INDEX idx_status (status)
     ) $charset_collate;";
     dbDelta($sql_enrollments);
+
+    // STUDENT MODULES (Module-level enrollments)
+    $t_student_modules = $wpdb->prefix . 'nds_student_modules';
+    $sql_student_modules = "CREATE TABLE IF NOT EXISTS $t_student_modules (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        student_id INT NOT NULL,
+        module_id INT NOT NULL,
+        academic_year_id INT NOT NULL,
+        semester_id INT NOT NULL,
+        status ENUM('enrolled','withdrawn','completed','failed') DEFAULT 'enrolled',
+        final_grade VARCHAR(10),
+        final_percentage DECIMAL(5,2),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (student_id) REFERENCES $t_students(id) ON DELETE CASCADE,
+        FOREIGN KEY (module_id) REFERENCES $t_modules(id) ON DELETE CASCADE,
+        FOREIGN KEY (academic_year_id) REFERENCES $t_academic_years(id) ON DELETE CASCADE,
+        FOREIGN KEY (semester_id) REFERENCES $t_semesters(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_student_module (student_id, module_id, academic_year_id, semester_id),
+        INDEX idx_module (module_id),
+        INDEX idx_status (status)
+    ) $charset_collate;";
+    dbDelta($sql_student_modules);
 
     // COHORTS (Groups of students within a program/year/semester)
     $sql_cohorts = "CREATE TABLE IF NOT EXISTS $t_cohorts (
@@ -760,6 +785,7 @@ function nds_school_create_tables()
     $sql_course_schedules = "CREATE TABLE IF NOT EXISTS $t_course_schedules (
         id INT AUTO_INCREMENT PRIMARY KEY,
         course_id INT NOT NULL,
+        module_id INT NULL,
         lecturer_id INT NULL,
         room_id INT NULL,
         days VARCHAR(50),
@@ -777,10 +803,12 @@ function nds_school_create_tables()
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (course_id) REFERENCES $t_courses(id) ON DELETE CASCADE,
+        FOREIGN KEY (module_id) REFERENCES $t_modules(id) ON DELETE SET NULL,
         FOREIGN KEY (lecturer_id) REFERENCES $t_staff(id) ON DELETE SET NULL,
         FOREIGN KEY (room_id) REFERENCES $t_rooms(id) ON DELETE SET NULL,
         FOREIGN KEY (cohort_id) REFERENCES $t_cohorts(id) ON DELETE SET NULL,
         INDEX idx_course (course_id),
+        INDEX idx_module (module_id),
         INDEX idx_lecturer (lecturer_id),
         INDEX idx_room (room_id),
         INDEX idx_cohort (cohort_id),
@@ -788,6 +816,15 @@ function nds_school_create_tables()
         INDEX idx_session_type (session_type)
     ) $charset_collate;";
     dbDelta($sql_course_schedules);
+
+    // Add module_id column if it doesn't exist (for existing installations)
+    $schedule_columns = $wpdb->get_col("SHOW COLUMNS FROM $t_course_schedules LIKE 'module_id'");
+    if (empty($schedule_columns)) {
+        $wpdb->query("ALTER TABLE $t_course_schedules ADD COLUMN module_id INT NULL AFTER course_id");
+        $wpdb->query("ALTER TABLE $t_course_schedules ADD INDEX idx_module (module_id)");
+        // Try to add FK as well - might fail if modules table is empty/inconsistent, so we suppress errors or just try
+        $wpdb->query("ALTER TABLE $t_course_schedules ADD CONSTRAINT fk_schedules_module FOREIGN KEY (module_id) REFERENCES $t_modules(id) ON DELETE SET NULL");
+    }
 
     // -------------------------------------------------------------------------
     // TIMETABLE SESSIONS (Detailed Session Scheduling - after staff & cohorts exist for FK)
@@ -967,6 +1004,61 @@ function nds_school_create_tables()
         INDEX idx_created_at (created_at)
     ) $charset_collate;";
     dbDelta($sql_notifications);
+
+    // STUDENT CERTIFICATES
+    $t_certificates = $wpdb->prefix . 'nds_certificates';
+    $sql_certificates = "CREATE TABLE IF NOT EXISTS $t_certificates (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        student_id INT NOT NULL,
+        course_id INT NULL,
+        certificate_type ENUM('completion', 'achievement', 'attendance', 'custom') DEFAULT 'completion',
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        issued_date DATE NOT NULL,
+        expiry_date DATE NULL,
+        certificate_number VARCHAR(100) UNIQUE,
+        template_id INT NULL,
+        issued_by INT NULL,
+        verification_code VARCHAR(100) UNIQUE,
+        status ENUM('active', 'revoked', 'expired') DEFAULT 'active',
+        download_count INT DEFAULT 0,
+        last_downloaded TIMESTAMP NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_student (student_id),
+        INDEX idx_course (course_id),
+        INDEX idx_status (status),
+        INDEX idx_issued_date (issued_date)
+    ) $charset_collate;";
+    dbDelta($sql_certificates);
+
+    // STUDENT PAYMENTS
+    $t_payments = $wpdb->prefix . 'nds_payments';
+    $sql_payments = "CREATE TABLE IF NOT EXISTS $t_payments (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        student_id INT NOT NULL,
+        enrollment_id INT NULL,
+        payment_type ENUM('tuition', 'application_fee', 'exam_fee', 'material_fee', 'other') DEFAULT 'tuition',
+        description VARCHAR(255),
+        amount DECIMAL(10,2) NOT NULL,
+        currency VARCHAR(3) DEFAULT 'ZAR',
+        status ENUM('pending', 'paid', 'overdue', 'cancelled', 'refunded') DEFAULT 'pending',
+        due_date DATE NULL,
+        paid_date DATE NULL,
+        payment_method VARCHAR(50),
+        transaction_id VARCHAR(100),
+        reference_number VARCHAR(100),
+        notes TEXT,
+        created_by INT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_student (student_id),
+        INDEX idx_enrollment (enrollment_id),
+        INDEX idx_status (status),
+        INDEX idx_due_date (due_date),
+        INDEX idx_paid_date (paid_date)
+    ) $charset_collate;";
+    dbDelta($sql_payments);
 
     // Backfill claim/import metadata from claimed_learners into students (idempotent)
     $backfill_sql = "

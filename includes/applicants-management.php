@@ -1844,30 +1844,62 @@ function nds_enroll_student_from_application($application_id, $student_id = null
         return false;
     }
 
-    // 4. Enroll in all courses of the program
-    $courses = $wpdb->get_results($wpdb->prepare(
-        "SELECT id FROM {$wpdb->prefix}nds_courses WHERE program_id = %d AND status = 'active'",
-        $program_id
-    ));
+    // 4. Check if student is already enrolled in any course (one qualification per student)
+    $existing_enrollment = $wpdb->get_row($wpdb->prepare(
+        "SELECT course_id FROM {$enrollments_table} WHERE student_id = %d AND status IN ('enrolled', 'applied', 'waitlisted')",
+        $student_id
+    ), ARRAY_A);
 
-    $enrollments_table = $wpdb->prefix . 'nds_student_enrollments';
-    foreach ($courses as $course) {
-        $cid = (int) $course->id;
+    if ($existing_enrollment) {
+        // Student already has a qualification - cannot enroll in another
+        return false;
+    }
+
+    // 5. Enroll in the specific course (qualification) from the application
+    if ($course_id > 0) {
         $exists = $wpdb->get_var($wpdb->prepare(
             "SELECT id FROM {$enrollments_table} WHERE student_id = %d AND course_id = %d AND academic_year_id = %d AND semester_id = %d",
-            $student_id, $cid, $active_year_id, $active_semester_id
+            $student_id, $course_id, $active_year_id, $active_semester_id
         ));
 
         if (!$exists) {
             $wpdb->insert($enrollments_table, [
                 'student_id' => $student_id,
-                'course_id' => $cid,
+                'course_id' => $course_id,
                 'academic_year_id' => $active_year_id,
                 'semester_id' => $active_semester_id,
                 'enrollment_date' => current_time('Y-m-d'),
                 'status' => 'enrolled',
                 'created_at' => current_time('mysql')
             ]);
+        }
+    }
+
+    // 6. Enroll in all modules of the course
+    if ($course_id > 0) {
+        $modules = $wpdb->get_results($wpdb->prepare(
+            "SELECT id FROM {$wpdb->prefix}nds_modules WHERE course_id = %d AND status = 'active'",
+            $course_id
+        ));
+
+        $student_modules_table = $wpdb->prefix . 'nds_student_modules';
+        foreach ($modules as $module) {
+            $module_id = (int) $module->id;
+            $exists = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM {$student_modules_table} WHERE student_id = %d AND module_id = %d AND academic_year_id = %d AND semester_id = %d",
+                $student_id, $module_id, $active_year_id, $active_semester_id
+            ));
+
+            if (!$exists) {
+                $wpdb->insert($student_modules_table, [
+                    'student_id' => $student_id,
+                    'module_id' => $module_id,
+                    'academic_year_id' => $active_year_id,
+                    'semester_id' => $active_semester_id,
+                    'status' => 'enrolled',
+                    'created_at' => current_time('mysql')
+                ]);
+            }
         }
     }
 

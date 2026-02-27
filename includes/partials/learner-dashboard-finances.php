@@ -9,10 +9,36 @@ if (!defined('ABSPATH')) {
 global $wpdb;
 $learner_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
-// TODO: Get financial data from payments/fees table when implemented
-$outstanding_balance = 0;
-$total_paid = 0;
-$pending_payments = [];
+// Get financial data from payments table
+$table_payments = $wpdb->prefix . 'nds_payments';
+
+// Calculate outstanding balance (pending + overdue)
+$outstanding_balance = $wpdb->get_var($wpdb->prepare("
+    SELECT SUM(amount) 
+    FROM {$table_payments} 
+    WHERE student_id = %d AND status IN ('pending', 'overdue')
+", $learner_id)) ?: 0;
+
+// Calculate total paid
+$total_paid = $wpdb->get_var($wpdb->prepare("
+    SELECT SUM(amount) 
+    FROM {$table_payments} 
+    WHERE student_id = %d AND status = 'paid'
+", $learner_id)) ?: 0;
+
+// Get all payments for history
+$all_payments = $wpdb->get_results($wpdb->prepare("
+    SELECT * FROM {$table_payments} 
+    WHERE student_id = %d
+    ORDER BY created_at DESC
+", $learner_id), ARRAY_A) ?: [];
+
+// Get pending payments for count display
+$pending_payments = $wpdb->get_results($wpdb->prepare("
+    SELECT * FROM {$table_payments} 
+    WHERE student_id = %d AND status IN ('pending', 'overdue')
+    ORDER BY due_date ASC
+", $learner_id), ARRAY_A) ?: [];
 ?>
 
 <div class="space-y-6">
@@ -64,12 +90,59 @@ $pending_payments = [];
                 Record Payment
             </button>
         </div>
-        
+        <?php if (!empty($all_payments)): ?>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid Date</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <?php foreach ($all_payments as $payment): ?>
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                    <?php echo esc_html($payment['description'] ?: ucfirst(str_replace('_', ' ', $payment['payment_type']))); ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                    R <?php echo number_format($payment['amount'], 2); ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                        <?php 
+                                        switch ($payment['status']) {
+                                            case 'paid': echo 'bg-green-100 text-green-800'; break;
+                                            case 'pending': echo 'bg-yellow-100 text-yellow-800'; break;
+                                            case 'overdue': echo 'bg-red-100 text-red-800'; break;
+                                            case 'cancelled': echo 'bg-gray-100 text-gray-800'; break;
+                                            default: echo 'bg-gray-100 text-gray-800';
+                                        }
+                                        ?>">
+                                        <?php echo ucfirst($payment['status']); ?>
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <?php echo $payment['due_date'] ? date('M j, Y', strtotime($payment['due_date'])) : 'N/A'; ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <?php echo $payment['paid_date'] ? date('M j, Y', strtotime($payment['paid_date'])) : 'N/A'; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php else: ?>
         <div class="text-center py-12">
             <i class="fas fa-money-bill-wave text-6xl text-gray-300 mb-4"></i>
             <h3 class="text-xl font-medium text-gray-900 mb-2">No Payment Records</h3>
-            <p class="text-gray-600">Financial management features coming soon.</p>
+            <p class="text-gray-600">No payments have been recorded for this student yet.</p>
         </div>
+        <?php endif; ?>
     </div>
 
     <!-- Fee Structure -->

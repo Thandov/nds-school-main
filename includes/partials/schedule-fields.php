@@ -16,6 +16,7 @@ if (!function_exists('nds_render_schedule_fields')) {
         $existing_schedules = $args['existing_schedules'] ?? [];
         $course_id = $args['course_id'] ?? 0;
         $default_lecturer_id = $args['default_lecturer_id'] ?? null;
+        $modules = $args['modules'] ?? [];
         
         // Fetch rooms from database
         $rooms_table = $wpdb->prefix . 'nds_rooms';
@@ -167,6 +168,32 @@ if (!function_exists('nds_render_schedule_fields')) {
                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                                     <p class="text-xs text-gray-500 mt-1">No rooms found in database. Using text input.</p>
                                 <?php endif; ?>
+                            </div>
+                            
+                            <!-- Module -->
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700 mb-2">
+                                    Module
+                                </label>
+                                <select name="<?php echo esc_attr($prefix); ?>[<?php echo $schedule_index; ?>][module_id]" 
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                    <option value="">Select Module (Optional)</option>
+                                    <?php if (!empty($modules)): ?>
+                                        <?php foreach ($modules as $module): ?>
+                                            <?php 
+                                            $mod_id = is_object($module) ? $module->id : $module['id'];
+                                            $mod_code = is_object($module) ? $module->code : $module['code'];
+                                            $mod_name = is_object($module) ? $module->name : $module['name'];
+                                            $is_selected = ($schedule && isset($schedule['module_id']) && $schedule['module_id'] == $mod_id);
+                                            ?>
+                                            <option value="<?php echo esc_attr($mod_id); ?>" <?php echo $is_selected ? 'selected' : ''; ?>>
+                                                <?php echo esc_html($mod_code . ' - ' . $mod_name); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    <?php else: ?>
+                                        <option value="" disabled>No modules available. Add modules above first.</option>
+                                    <?php endif; ?>
+                                </select>
                             </div>
                             
                             <!-- Session Type -->
